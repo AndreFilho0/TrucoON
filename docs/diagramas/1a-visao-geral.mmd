@@ -1,0 +1,29 @@
+%% Visão geral: o nó de controle faz o papel do GroupMngr.py + comparisonServer.py
+flowchart LR
+  subgraph CTRL["Nó de controle (ROLE=control)"]
+    direction TB
+    GM["GroupManager<br/><i>registro e descoberta</i><br/>(era o GroupMngr.py)"]
+    VER["Verifier<br/><i>dispara experimentos e compara</i><br/>(era o comparisonServer.py)"]
+  end
+
+  subgraph PEERS["Grupo de peers (ROLE=peer)"]
+    direction TB
+    P1["Peer 1"]
+    P2["Peer 2"]
+    P3["Peer 3"]
+  end
+
+  NET(("multicast<br/>UDP"))
+
+  GM <== "register · list<br/>(socket TCP ou RPC)" ==> PEERS
+  VER <== "start_bench · bench_log<br/>(socket TCP ou RPC)" ==> PEERS
+  P1 <-.-> NET
+  P2 <-.-> NET
+  P3 <-.-> NET
+
+  classDef ctrl fill:#FEF3C7,stroke:#B45309,color:#111
+  classDef peer fill:#DCFCE7,stroke:#15803D,color:#111
+  classDef net fill:#FFFFFF,stroke:#15803D,stroke-dasharray: 4 3,color:#111
+  class GM,VER ctrl
+  class P1,P2,P3 peer
+  class NET net

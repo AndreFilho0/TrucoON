@@ -1,0 +1,28 @@
+%% O mesmo pedido pelos dois transportes; o servidor atende com a mesma handle/2
+sequenceDiagram
+  autonumber
+  participant P as Peer (cliente)
+  participant C as Client.request/3
+  participant S as SocketServer (TCP)
+  participant G as GroupManager.handle/2
+
+  rect rgb(254, 243, 199)
+  Note over P,G: CONTROL=socket
+  P->>C: request(gm, {:register, info})
+  C->>S: connect TCP (handshake de 3 vias)
+  C->>S: term_to_binary(pedido), prefixo de 4 bytes
+  S->>G: handle(inst, {:register, info})
+  G-->>S: {:ok, membro}
+  S-->>C: term_to_binary(resposta)
+  C->>S: close
+  C-->>P: {:ok, membro}
+  end
+
+  rect rgb(220, 252, 231)
+  Note over P,G: CONTROL=rpc
+  P->>C: request(gm, {:register, info})
+  C->>G: :erpc.call(nó, GroupManager, :handle, [inst, pedido])
+  Note right of C: conexão persistente entre nós Erlang,<br/>serialização e erros pelo runtime
+  G-->>C: {:ok, membro}
+  C-->>P: {:ok, membro}
+  end
