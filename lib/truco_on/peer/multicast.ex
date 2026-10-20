@@ -167,6 +167,9 @@ defmodule TrucoOn.Peer.Multicast do
       ready: state.ready,
       udp_port: state.port,
       faults: state.faults,
+      sequencer:
+        state.mode == :sequencer && state.ord &&
+          TrucoOn.Multicast.Ordering.Sequencer.sequencer(state.ord),
       pending_acks: Reliable.pending(state.rel),
       held_back: Reliable.held_back(state.rel),
       ordering_queue: if(state.ord, do: state.ord_mod.pending(state.ord), else: 0)

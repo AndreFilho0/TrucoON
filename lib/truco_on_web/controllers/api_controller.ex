@@ -28,6 +28,7 @@ defmodule TrucoOnWeb.ApiController do
       region: me && me.region,
       ordering: mc.mode,
       group_ready: mc.ready,
+      sequencer: mc.sequencer,
       peers:
         Enum.map(view || [], fn m ->
           %{id: m.id, region: m.region, url: "http://#{m.host}:#{m.http_port}"}

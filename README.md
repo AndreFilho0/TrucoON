@@ -4,34 +4,67 @@ Trabalho final de **Sistemas Distribuídos (INF0344 — UFG, 2026/2)**, constru�
 partir do [MPComm](https://github.com/professorfabio/MPComm) do Prof. Fábio M. Costa,
 reescrito em **Elixir/Erlang** (com a autorização do professor).
 
-Esta versão (`parte-3`) adiciona o **multicast totalmente ordenado com relógios de
-Lamport**: todas as réplicas aplicam as jogadas na mesma ordem e as mesas ficam
-idênticas, verificado pelo experimento do MPComm e pela comparação das réplicas.
+O MPComm mostra que, sem coordenação, processos que trocam mensagens por
+multicast recebem essas mensagens em **ordens diferentes**. O TrucoON dá um
+significado a essas mensagens: cada peer guarda uma **réplica das mesas de truco**,
+e cada mensagem é uma **jogada**. Se as réplicas aplicam as jogadas em ordens
+diferentes, o estado diverge: duas réplicas podem dar a mesma cadeira a jogadores
+diferentes, ou uma aceitar um truco que a outra rejeitou.
 
-| Parte | Enunciado | Estado nesta versão | Documento |
+| Parte | O que pede o enunciado | Onde está | Documento |
 |---|---|---|---|
-| 1a | Trocar sockets por RPC no cliente-servidor e comparar | ✅ | [docs/parte-1a-rpc.md](docs/parte-1a-rpc.md) |
-| 1b | Perda de mensagens + ordem FIFO no multicast, com sockets | ✅ | [docs/parte-1b-perda-fifo.md](docs/parte-1b-perda-fifo.md) |
-| 2 | Aplicação em que a ordem é crítica (truco replicado) | ✅ | [docs/parte-2-aplicacao.md](docs/parte-2-aplicacao.md) |
-| 3 | Coordenação por ordem total (Lamport, cap. 5) | ✅ | [docs/parte-3-ordem-total.md](docs/parte-3-ordem-total.md) |
-| 4 | Coordenação mais leve (sequenciador, cap. 7) | próximas entregas | — |
+| 1a | Trocar sockets por RPC no cliente-servidor e comparar | `lib/truco_on/control/` | [docs/parte-1a-rpc.md](docs/parte-1a-rpc.md) |
+| 1b | Perda de mensagens + ordem FIFO no multicast, com sockets | `lib/truco_on/multicast/reliable.ex`, `peer/multicast.ex` | [docs/parte-1b-perda-fifo.md](docs/parte-1b-perda-fifo.md) |
+| 2 | Aplicação em que a ordem é crítica + melhorias no código-base | `lib/truco_on/truco/`, `peer/replica.ex`, `app/` | [docs/parte-2-aplicacao.md](docs/parte-2-aplicacao.md) |
+| 3 | Coordenação por ordem total (cap. 5) | `multicast/ordering/lamport.ex` | [docs/parte-3-ordem-total.md](docs/parte-3-ordem-total.md) |
+| 4 | Coordenação mais leve (cap. 7) | `multicast/ordering/sequencer.ex` | [docs/parte-4-sequenciador.md](docs/parte-4-sequenciador.md) |
 
-## Resultado
+## Resultado em uma tabela
 
-4 peers, 10% de perda e 0–60 ms de atraso, 30 mensagens por peer:
+4 peers, 10% de perda e 0–60 ms de atraso por datagrama, 30 mensagens por peer
+(`scripts/measure.sh 4 30` com `LOSS=0.1 DELAY_MAX=60`):
 
-| `ORDERING` | Perdidas | Posições fora de ordem | Mesas divergentes | Msgs de protocolo / multicast |
-|---|---|---|---|---|
-| `none` | 50 | 110 de 110 | 8 de 8 | 4 |
-| `fifo` | 0 | 116 de 120 | 8 de 8 | 4 |
-| `total` (Lamport) | 0 | **0** de 120 | **0** de 8 | 20 (= N + N²) |
+| `ORDERING` | Mensagens perdidas | Violações FIFO | Posições fora de ordem | Mesas divergentes (disputa de cadeiras) | Msgs de protocolo / multicast |
+|---|---|---|---|---|---|
+| `none` (MPComm original) | 50 | 28 | 110 de 110 | 8 de 8 | 4 |
+| `fifo` (Parte 1b) | 0 | 0 | 116 de 120 | 8 de 8 | 4 |
+| `total` (Parte 3, Lamport) | 0 | 0 | **0** de 120 | **0** de 8 | 20 (= N + N²) |
+| `sequencer` (Parte 4) | 0 | 0 | **0** de 120 | **0** de 8 | 4,75 (≤ N + 1) |
 
 ## Arquitetura
 
 ![Arquitetura do TrucoON](docs/diagramas/2-arquitetura.png)
 
-Detalhes de implementação, comparação e como demonstrar estão no documento de cada
-parte (tabela acima).
+Todos os diagramas (fonte Mermaid, SVG e PNG para slides) estão em
+[docs/arquitetura.md](docs/arquitetura.md).
+
+```
+   navegador (Expo Web, mobile-first)          navegador
+        │ REST + WebSocket                          │
+        ▼                                           ▼
+ ┌─────────────── peer 1 ───────────────┐   ┌──── peer 2 ────┐   ┌── peer 3 ──┐
+ │ Phoenix (REST sem estado + Channels) │   │      ...       │   │    ...     │
+ │ Replica  ── base de mesas + ETS      │   │                │   │            │
+ │ Ordenação  none│fifo│total│sequencer │   │                │   │            │
+ │ Canal confiável FIFO (seq/ACK/retx)  │   │                │   │            │
+ │ UDP (:gen_udp) + injeção de falhas   │◄─►│   UDP          │◄─►│   UDP      │
+ └──────────────┬───────────────────────┘   └───────┬────────┘   └─────┬──────┘
+                │ socket TCP  ou  RPC (:erpc)        │                  │
+                ▼                                    ▼                  ▼
+          ┌────────────── nó de controle ──────────────┐
+          │ GroupManager — registro e descoberta       │
+          │ Verifier — dispara experimentos e compara  │
+          └────────────────────────────────────────────┘
+```
+
+- **Peers** (`ROLE=peer`) trocam mensagens entre si **só por UDP**. Cada um tem uma
+  réplica completa de todas as mesas e um servidor web para os jogadores ligados a ele.
+- **Nó de controle** (`ROLE=control`) faz o papel dos servidores do MPComm
+  (`GroupMngr.py` e `comparisonServer.py`). Fala com os peers por socket TCP ou por
+  RPC, conforme `CONTROL`.
+- **Frontend** (`app/`): Expo + React Native Web + NativeWind + Zustand, a base do
+  `melivra_mobile`. Cria a mesa, gera o link e o QR code de convite, mostra o lobby,
+  a mesa de jogo e um painel com o hash da mesa em cada réplica.
 
 ## Instalação
 
@@ -131,20 +164,95 @@ as versões acima.
 
 ## Como rodar
 
+Com tudo instalado (seção anterior):
+
 ```bash
-scripts/build_web.sh                       # gera o frontend (uma vez)
-ORDERING=total LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
-scripts/run.sh 'V.bench(30)'               # 0 posições fora de ordem
-scripts/run.sh 'S.seat_race(rooms: 8)'     # 0 mesas divergentes
-scripts/run.sh 'V.message_cost()'          # 20 mensagens por multicast (N = 4)
-scripts/down.sh
+ORDERING=total scripts/up.sh 3        # controle + 3 peers em segundo plano
+# abra http://localhost:4001, :4002 ou :4003 (um servidor de jogo em cada)
+
+scripts/console.sh                    # IEx no nó de controle
+scripts/down.sh                       # para tudo
 ```
 
-Compare com `ORDERING=fifo`: mesmo cenário, réplicas divergentes. Na interface, o
-painel **⚙ Réplicas** fica verde com `total`.
+Os peers levam uns 10 segundos para se registrar e formar o grupo; na tela inicial a
+bolinha fica verde quando o grupo está pronto. Depois de mudar algo em `app/`, rode
+`scripts/build_web.sh` de novo.
+
+### Jogando pelo celular (mesma rede Wi-Fi)
+
+```bash
+ipconfig getifaddr en0                               # IP do computador (Linux: hostname -I)
+PEER_HOST=192.168.0.10 ORDERING=total scripts/up.sh 3
+```
+
+Abra `http://192.168.0.10:4001` no computador **pelo IP**, não por `localhost`, para
+que o link e o QR code do convite funcionem no celular. Use o mesmo `PEER_HOST` no
+`scripts/run.sh` e no `scripts/console.sh`. No macOS, permita conexões de entrada para
+o `beam.smp` se o firewall perguntar.
+
+Variáveis do `scripts/up.sh`:
+
+| Variável | Valores | Efeito |
+|---|---|---|
+| `ORDERING` | `none`, `fifo`, `total`, `sequencer` | política de ordenação do multicast |
+| `CONTROL` | `rpc`, `socket` | transporte das interações cliente-servidor |
+| `LOSS` | `0.0`–`1.0` | probabilidade de descartar cada datagrama UDP |
+| `DELAY_MIN`, `DELAY_MAX` | ms | atraso aleatório por datagrama (gera reordenação) |
+| `REMOTE_DELAY` | ms | só o último peer fica "em outra região" com esse atraso |
+
+No console do nó de controle (`scripts/console.sh`), ou de fora com `scripts/run.sh '<expressão>'`:
+
+```elixir
+V.bench(50)                          # experimento do MPComm: compara a ordem de entrega
+V.replicas()                         # compara as réplicas das mesas de truco
+V.message_cost()                     # mensagens por multicast
+V.transport_benchmark(300)           # socket TCP × RPC (Parte 1a)
+V.faults(0.1, 0, 80)                 # muda perda/atraso em todos os peers em tempo real
+S.seat_race(rooms: 10)               # cenário: 4 jogadores disputando cadeiras
+S.games(rooms: 3, duration_ms: 20_000) # cenário: partidas inteiras com bots
+```
+
+Para rodar em várias máquinas (como o MPComm sugere: peers em regiões diferentes da
+nuvem), suba em cada VM com `PEER_HOST=<IP público>`, `CONTROL_HOST`/`CONTROL_NODE`
+apontando para a VM de controle e libere as portas UDP (6789+), TCP (5678–5680, 5690+)
+e, no modo RPC, a 4369 (epmd) e as portas da distribuição Erlang.
+
+### Frontend em modo desenvolvimento
+
+```bash
+cd app && npm install && npm run web   # Expo em http://localhost:8081, usa o peer :4001
+EXPO_PUBLIC_SERVER=http://192.168.0.10:4001 npm run web   # outro peer / celular na rede
+```
 
 ## Testes
 
 ```bash
-mix test
+mix test        # 56 testes, ~35 s
+```
+
+- **Unitários**: regras do truco (portadas do melivra), sala/lobby, canal confiável
+  e políticas de ordenação. Os testes de protocolo usam uma rede simulada em memória
+  que perde, duplica e reordena mensagens.
+- **Integração** (`test/truco_on/integration/`): GroupManager, Verifier e 3–4 peers
+  reais na mesma VM, trocando datagramas UDP com 15% de perda. Verificam cada parte:
+  controle por socket e por RPC, ausência de perda e violação FIFO, ordem idêntica com
+  Lamport e sequenciador, o custo exato de mensagens (20 por multicast com N = 4 no
+  Lamport), réplicas iguais com ordem total e **divergentes** sem ela.
+
+## Estrutura
+
+```
+lib/truco_on/
+  control/          client.ex (socket × RPC), socket_server.ex, group_manager.ex,
+                    verifier.ex, compare.ex, scenario.ex
+  multicast/        reliable.ex (Parte 1b), ordering.ex (none/fifo),
+                    ordering/lamport.ex (Parte 3), ordering/sequencer.ex (Parte 4)
+  peer/             multicast.ex (UDP + camadas), replica.ex, membership.ex,
+                    experiment.ex, control.ex, bot.ex
+  truco/            deck, evaluator, rules (portados do melivra), game.ex (pura),
+                    rooms.ex (base replicada), code.ex (código de convite)
+lib/truco_on_web/   REST, WebSocket (RoomChannel), CORS, identidade de convidado
+app/                frontend Expo (base do melivra_mobile)
+scripts/            up, down, console, run, measure, build_web
+test/               unitários + integração com peers reais
 ```

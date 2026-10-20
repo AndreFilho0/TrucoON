@@ -6,7 +6,7 @@ defmodule TrucoOn.Multicast.ProtocolsTest do
   use ExUnit.Case, async: true
 
   alias TrucoOn.Multicast.Reliable
-  alias TrucoOn.Multicast.Ordering.{Basic, Lamport}
+  alias TrucoOn.Multicast.Ordering.{Basic, Lamport, Sequencer}
 
   describe "Reliable (Parte 1b)" do
     test "entrega tudo, sem duplicatas e em ordem FIFO, mesmo com perda e reordenação" do
@@ -36,7 +36,7 @@ defmodule TrucoOn.Multicast.ProtocolsTest do
   end
 
   describe "ordem total" do
-    for mod <- [Lamport] do
+    for mod <- [Lamport, Sequencer] do
       test "#{inspect(mod)}: todos os processos entregam a mesma sequência" do
         :rand.seed(:exsss, {7, 8, 9})
 
@@ -59,8 +59,10 @@ defmodule TrucoOn.Multicast.ProtocolsTest do
       assert divergent > 0
     end
 
-    test "custo em mensagens: Lamport N + N²" do
-      assert count_messages(Lamport, [1, 2, 3, 4]) == 4 + 16
+    test "custo em mensagens: Lamport N + N², sequenciador N + 1" do
+      ids = [1, 2, 3, 4]
+      assert count_messages(Lamport, ids) == 4 + 16
+      assert count_messages(Sequencer, ids) == 1 + 4
     end
   end
 
