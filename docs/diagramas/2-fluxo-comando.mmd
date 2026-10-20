@@ -1,0 +1,22 @@
+%% Caminho de uma jogada: o peer só aplica depois da entrega pelo multicast
+sequenceDiagram
+  autonumber
+  actor Ana as Ana (navegador)
+  participant CH as RoomChannel (peer 1)
+  participant R1 as Replica (peer 1)
+  participant MC as Multicast
+  participant R2 as Replica (peer 2)
+  participant R3 as Replica (peer 3)
+
+  Ana->>CH: push "truco"
+  CH->>R1: submit({:act, mesa, ana, :truco})
+  R1->>MC: multicast({:cmd, uid, cmd})
+  Note over MC: protocolo de ordenação<br/>(none · fifo · total · sequencer)
+  MC-->>R1: entrega cmd (posição k)
+  MC-->>R2: entrega cmd (posição k)
+  MC-->>R3: entrega cmd (posição k)
+  R1->>R1: Rooms.apply/2 → ETS → PubSub local
+  R2->>R2: Rooms.apply/2 → ETS → PubSub local
+  R3->>R3: Rooms.apply/2 → ETS → PubSub local
+  R1-->>CH: {:ok, _} (era o comando dela)
+  CH-->>Ana: ok + "state" (visão só com a mão dela)

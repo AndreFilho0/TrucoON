@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Executa uma expressão Elixir no nó de controle e imprime o resultado. Ex.:
 #   scripts/run.sh 'V.bench(30)'
+#   scripts/run.sh 'S.seat_race(rooms: 10)'
 cd "$(dirname "$0")/.."
 HOST="${PEER_HOST:-127.0.0.1}"
 export TRUCO_EXPR="alias TrucoOn.Control.Verifier, as: V; alias TrucoOn.Control.Scenario, as: S

@@ -4,35 +4,35 @@ Trabalho final de **Sistemas Distribuídos (INF0344 — UFG, 2026/2)**, constru�
 partir do [MPComm](https://github.com/professorfabio/MPComm) do Prof. Fábio M. Costa,
 reescrito em **Elixir/Erlang** (com a autorização do professor).
 
-Esta versão (`parte-1b`) completa a **Parte 1**: além do controle por socket ou RPC
-(1a), o multicast entre os peers continua em **sockets UDP** mas agora com um **canal
-confiável e FIFO** por par de processos (número de sequência, ACK cumulativo,
-retransmissão e fila de espera).
+Esta versão (`parte-2`) dá **significado às mensagens**: cada peer guarda uma
+**réplica das mesas de truco** (1x1 e 2x2, partidas privadas por link ou QR code) e cada
+mensagem multicast é uma **jogada**. Sem coordenação, as réplicas aplicam as jogadas em
+ordens diferentes e **divergem**, o que esta versão mostra e mede. A coordenação vem
+nas Partes 3 e 4.
 
 | Parte | Enunciado | Estado nesta versão | Documento |
 |---|---|---|---|
 | 1a | Trocar sockets por RPC no cliente-servidor e comparar | ✅ | [docs/parte-1a-rpc.md](docs/parte-1a-rpc.md) |
 | 1b | Perda de mensagens + ordem FIFO no multicast, com sockets | ✅ | [docs/parte-1b-perda-fifo.md](docs/parte-1b-perda-fifo.md) |
-| 2 | Aplicação em que a ordem é crítica (truco replicado) | próximas entregas | — |
+| 2 | Aplicação em que a ordem é crítica (truco replicado) | ✅ | [docs/parte-2-aplicacao.md](docs/parte-2-aplicacao.md) |
 | 3 | Coordenação por ordem total (Lamport, cap. 5) | próximas entregas | — |
 | 4 | Coordenação mais leve (sequenciador, cap. 7) | próximas entregas | — |
 
 ## Resultado
 
-4 peers, 10% de perda e 0–60 ms de atraso por datagrama, 30 mensagens por peer:
+4 peers, 10% de perda e 0–60 ms de atraso, disputa de cadeiras em 8 mesas
+(`S.seat_race(rooms: 8)`):
 
-| `ORDERING` | Mensagens perdidas | Violações FIFO | Posições fora de ordem |
+| `ORDERING` | Perdidas | Posições fora de ordem | Mesas divergentes |
 |---|---|---|---|
-| `none` (MPComm original) | 50 | 28 | 110 de 110 |
-| `fifo` (Parte 1b) | 0 | 0 | 116 de 120 |
+| `none` | 50 | 110 de 110 | 8 de 8 |
+| `fifo` | 0 | 116 de 120 | 8 de 8 |
 
-FIFO elimina perdas e violações de ordem **por remetente**, mas cada peer ainda vê as
-mensagens de remetentes diferentes numa ordem diferente: isso é o que as Partes 3 e 4
-resolvem.
+Sem ordem total, **todas** as mesas da disputa terminaram diferentes entre as réplicas.
 
 ## Arquitetura
 
-![Camadas de um peer](docs/diagramas/1b-camadas-peer.png)
+![Arquitetura do TrucoON](docs/diagramas/2-arquitetura.png)
 
 Detalhes de implementação, comparação e como demonstrar estão no documento de cada
 parte (tabela acima).
@@ -45,11 +45,12 @@ parte (tabela acima).
 |---|---|---|
 | **Erlang/OTP** | 27.1.1 | runtime dos nós: processos, sockets UDP/TCP e distribuição (`:erpc`) |
 | **Elixir** | 1.17.1 (compilado para OTP 27) | backend: protocolos, réplicas, Phoenix |
-| **Node.js + npm** | 22.5.1 | só a partir da Parte 2 (frontend) |
+| **Node.js + npm** | 22.5.1 | só para gerar o frontend (`scripts/build_web.sh`) |
 
 Não é preciso banco de dados nem Docker: o estado fica em memória, replicado entre os
-peers. As dependências do Elixir (Phoenix 1.7.24 e Bandit) são baixadas pelo `mix`, com as
-versões fixadas em `mix.lock`.
+peers. As dependências de cada linguagem (Phoenix 1.7.24 e Bandit no backend; Expo 54,
+React Native Web, NativeWind e Zustand no frontend) são baixadas pelo `mix` e pelo
+`npm`, com as versões fixadas em `mix.lock` e `app/package-lock.json`.
 
 Desenvolvido e testado em **macOS 26 (Apple Silicon)** com **asdf 0.19**. Os scripts
 são em bash, então em Linux funcionam igual; no Windows, use o WSL.
@@ -122,6 +123,7 @@ node --version          # v22.5.1
 mix local.hex --force
 mix local.rebar --force
 mix deps.get
+scripts/build_web.sh    # instala os pacotes do app/ (npm) e gera o frontend
 ```
 
 ### Sem asdf
@@ -134,17 +136,18 @@ as versões acima.
 ## Como rodar
 
 ```bash
-ORDERING=none LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4   # MPComm original: perde e reordena
-scripts/run.sh 'V.bench(30)'
-scripts/down.sh
+scripts/build_web.sh                       # gera o frontend (uma vez)
+ORDERING=fifo DELAY_MAX=60 scripts/up.sh 3
+# abra http://localhost:4001, :4002 e :4003 (um servidor de jogo em cada)
 
-ORDERING=fifo LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4   # canal confiável FIFO
-scripts/run.sh 'V.bench(30)'
+scripts/run.sh 'S.seat_race(rooms: 8)'     # disputa de cadeiras: réplicas divergem
+scripts/run.sh 'S.games(rooms: 3, duration_ms: 20_000)'   # partidas com bots
+scripts/run.sh 'V.replicas()'              # compara as réplicas
 scripts/down.sh
 ```
 
-Variáveis: `ORDERING` (`none`, `fifo`), `CONTROL` (`rpc`, `socket`), `LOSS`,
-`DELAY_MIN`, `DELAY_MAX`, `REMOTE_DELAY`.
+Na mesa, o painel **⚙ Réplicas** mostra o hash do estado da mesa em cada peer. Para
+jogar pelo celular na mesma rede, use `PEER_HOST=<IP do computador>` e abra pelo IP.
 
 ## Testes
 

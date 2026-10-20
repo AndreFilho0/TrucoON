@@ -1,0 +1,19 @@
+%% Árvore de supervisão OTP de um nó peer
+flowchart TB
+  APP["TrucoOn.Supervisor<br/><i>one_for_one</i>"]
+  APP --> TEL["Telemetry"]
+  APP --> PS["Phoenix.PubSub"]
+  APP --> REG["Registry<br/><i>nomes {inst, papel}</i>"]
+  APP --> PEER["TrucoOn.Peer<br/><i>rest_for_one</i>"]
+  APP --> EP["TrucoOnWeb.Endpoint<br/><i>HTTP + WebSocket</i>"]
+  PEER --> REP["Replica<br/><i>base de mesas + ETS</i>"]
+  PEER --> EXP["Experiment<br/><i>experimento do MPComm</i>"]
+  PEER --> MC["Multicast<br/><i>socket UDP</i>"]
+  PEER --> SS["SocketServer<br/><i>controle TCP</i>"]
+  PEER --> MEM["Membership<br/><i>registro no grupo</i>"]
+  EP --> CH["RoomChannel<br/><i>1 processo por jogador</i>"]
+
+  classDef sup fill:#FEF3C7,stroke:#B45309,color:#111
+  classDef work fill:#DCFCE7,stroke:#15803D,color:#111
+  class APP,PEER sup
+  class TEL,PS,REG,EP,REP,EXP,MC,SS,MEM,CH work

@@ -1,0 +1,48 @@
+%% Arquitetura completa do TrucoON
+flowchart TB
+  J1["Ana<br/>navegador"]
+  J2["Bia<br/>navegador"]
+  J3["Caio<br/>navegador"]
+
+  subgraph PEER1["Peer 1 · região 1"]
+    direction TB
+    W1["Phoenix<br/>REST + WebSocket"] --> R1["Replica<br/>mesas + ETS"] --> M1["Multicast<br/>ordenação · canal FIFO"]
+  end
+  subgraph PEER2["Peer 2 · região 2"]
+    direction TB
+    W2["Phoenix<br/>REST + WebSocket"] --> R2["Replica<br/>mesas + ETS"] --> M2["Multicast<br/>ordenação · canal FIFO"]
+  end
+  subgraph PEER3["Peer 3 · região 3"]
+    direction TB
+    W3["Phoenix<br/>REST + WebSocket"] --> R3["Replica<br/>mesas + ETS"] --> M3["Multicast<br/>ordenação · canal FIFO"]
+  end
+
+  J1 -- "HTTP + WebSocket" --> W1
+  J2 -- "HTTP + WebSocket" --> W2
+  J3 -- "HTTP + WebSocket" --> W3
+
+  NET(("rede UDP<br/>comandos replicados"))
+  M1 <-.-> NET
+  M2 <-.-> NET
+  M3 <-.-> NET
+
+  subgraph CTRL["Nó de controle"]
+    direction LR
+    GM["GroupManager<br/>registro e descoberta"]
+    VER["Verifier<br/>experimentos e comparação"]
+  end
+  NET ~~~ CTRL
+  PEER1 & PEER2 & PEER3 -. "socket TCP ou RPC" .- CTRL
+
+  classDef user fill:#F3F4F6,stroke:#6B7280,color:#111
+  classDef web fill:#DBEAFE,stroke:#1D4ED8,color:#111
+  classDef rep fill:#EDE9FE,stroke:#6D28D9,color:#111
+  classDef mc fill:#DCFCE7,stroke:#15803D,color:#111
+  classDef ctrl fill:#FEF3C7,stroke:#B45309,color:#111
+  classDef net fill:#FFFFFF,stroke:#15803D,stroke-dasharray: 4 3,color:#111
+  class J1,J2,J3 user
+  class W1,W2,W3 web
+  class R1,R2,R3 rep
+  class M1,M2,M3 mc
+  class GM,VER ctrl
+  class NET net

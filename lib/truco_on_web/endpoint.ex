@@ -11,6 +11,9 @@ defmodule TrucoOnWeb.Endpoint do
     same_site: "Lax"
   ]
 
+  # WebSocket dos jogadores (Phoenix Channels)
+  socket "/socket", TrucoOnWeb.UserSocket, websocket: true, longpoll: false
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # You should set gzip to true if you are running phx.digest
@@ -35,6 +38,7 @@ defmodule TrucoOnWeb.Endpoint do
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
 
+  plug TrucoOnWeb.CORS
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options

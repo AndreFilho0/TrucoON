@@ -6,10 +6,12 @@ defmodule TrucoOn.Control.Verifier do
   Use no IEx do nó de controle:
 
       V.bench(50)          # cada peer envia 50 mensagens; compara as ordens
+      V.replicas()         # compara o estado das réplicas de truco
       V.stats()            # mensagens enviadas por tipo, em cada peer
       V.faults(0.1, 0, 80) # 10% de perda e 0–80 ms de atraso em todos
       V.interactive()      # laço igual ao original ("Enter the number of messages...")
 
+  Cenários de truco ficam em `TrucoOn.Control.Scenario`.
   """
 
   use GenServer
@@ -67,6 +69,20 @@ defmodule TrucoOn.Control.Verifier do
           _ -> interactive()
         end
     end
+  end
+
+  @doc "Compara o estado das réplicas de truco de todos os peers."
+  def replicas(opts \\ []) do
+    digests = collect(:replica_digest)
+    logs = collect(:replica_log) |> Map.new(fn {id, log} -> {id, Enum.map(log, & &1.uid)} end)
+
+    report =
+      digests
+      |> Compare.replicas()
+      |> Map.put(:command_order, Compare.sequences(logs))
+
+    unless opts[:quiet], do: print_replicas(report)
+    report
   end
 
   @doc "Estatísticas de envio do multicast em cada peer."
@@ -280,6 +296,17 @@ defmodule TrucoOn.Control.Verifier do
     Todos entregaram a mesma sequência? #{yes(r.identical)}
     Custo: #{c.protocol_per_multicast} msgs de protocolo/multicast, #{c.udp_per_multicast} datagramas UDP/multicast
            (acks #{c.acks}, retransmissões #{c.retransmissions}, descartados pela injeção de falhas #{c.dropped_by_fault})
+    """)
+  end
+
+  defp print_replicas(r) do
+    IO.puts("""
+
+    ── Réplicas ──
+    Mesas: #{r.rooms}   Mesas divergentes: #{length(r.divergent_rooms)} #{inspect(r.divergent_rooms)}
+    Comandos aplicados por peer: #{inspect(r.applied)}
+    Mesma ordem de comandos em todos? #{yes(r.same_command_order)} (posições diferentes: #{r.command_order.unordered_rounds})
+    Réplicas consistentes? #{yes(r.consistent)}
     """)
   end
 

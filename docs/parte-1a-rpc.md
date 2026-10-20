@@ -79,10 +79,11 @@ programar à mão multiplexação, *keepalive* e reconexão.
 - **Segurança e implantação**: a distribuição Erlang exige a porta 4369 (epmd) e um
   intervalo de portas abertos. Quem tem o cookie pode executar **qualquer** função no
   nó remoto. O socket expõe só o que `handle/2` aceita.
-- **Malha completa**: por padrão um nó conecta em todos os outros que conhece, e
-  bibliotecas distribuídas (como o `Phoenix.PubSub`) passam a enviar mensagens entre
-  eles sem que o código peça explicitamente. É preciso cuidado para que isso não
-  substitua, sem querer, a comunicação que queremos controlar (o multicast UDP).
+- **Malha completa**: por padrão um nó conecta em todos os outros que conhece. Isso
+  quase causou um bug sério no TrucoON: com os peers conectados via distribuição, o
+  `Phoenix.PubSub` (distribuído por padrão) mandava atualizações de uma réplica para
+  jogadores ligados a outros peers, mascarando a replicação. A correção foi usar
+  `local_broadcast` (ver `peer/replica.ex`).
 
 ### Vantagens do socket
 

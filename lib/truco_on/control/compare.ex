@@ -68,4 +68,26 @@ defmodule TrucoOn.Control.Compare do
 
     count
   end
+
+  @doc "Compara os resumos das réplicas (`Replica.digest/1`) de cada peer."
+  def replicas(digests) do
+    codes = digests |> Map.values() |> Enum.flat_map(&Map.keys(&1.rooms)) |> Enum.uniq()
+
+    divergent =
+      Enum.filter(codes, fn code ->
+        digests |> Map.values() |> Enum.map(&Map.get(&1.rooms, code)) |> Enum.uniq() |> length() >
+          1
+      end)
+
+    %{
+      rooms: length(codes),
+      divergent_rooms: divergent,
+      same_command_order:
+        digests |> Map.values() |> Enum.map(& &1.chain) |> Enum.uniq() |> length() == 1,
+      applied: Map.new(digests, fn {id, d} -> {id, d.applied} end),
+      consistent:
+        divergent == [] and
+          digests |> Map.values() |> Enum.map(& &1.state_hash) |> Enum.uniq() |> length() <= 1
+    }
+  end
 end
