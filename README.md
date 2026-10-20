@@ -4,31 +4,27 @@ Trabalho final de **Sistemas Distribuídos (INF0344 — UFG, 2026/2)**, constru�
 partir do [MPComm](https://github.com/professorfabio/MPComm) do Prof. Fábio M. Costa,
 reescrito em **Elixir/Erlang** (com a autorização do professor).
 
-Esta versão (`parte-2`) dá **significado às mensagens**: cada peer guarda uma
-**réplica das mesas de truco** (1x1 e 2x2, partidas privadas por link ou QR code) e cada
-mensagem multicast é uma **jogada**. Sem coordenação, as réplicas aplicam as jogadas em
-ordens diferentes e **divergem**, o que esta versão mostra e mede. A coordenação vem
-nas Partes 3 e 4.
+Esta versão (`parte-3`) adiciona o **multicast totalmente ordenado com relógios de
+Lamport**: todas as réplicas aplicam as jogadas na mesma ordem e as mesas ficam
+idênticas, verificado pelo experimento do MPComm e pela comparação das réplicas.
 
 | Parte | Enunciado | Estado nesta versão | Documento |
 |---|---|---|---|
 | 1a | Trocar sockets por RPC no cliente-servidor e comparar | ✅ | [docs/parte-1a-rpc.md](docs/parte-1a-rpc.md) |
 | 1b | Perda de mensagens + ordem FIFO no multicast, com sockets | ✅ | [docs/parte-1b-perda-fifo.md](docs/parte-1b-perda-fifo.md) |
 | 2 | Aplicação em que a ordem é crítica (truco replicado) | ✅ | [docs/parte-2-aplicacao.md](docs/parte-2-aplicacao.md) |
-| 3 | Coordenação por ordem total (Lamport, cap. 5) | próximas entregas | — |
+| 3 | Coordenação por ordem total (Lamport, cap. 5) | ✅ | [docs/parte-3-ordem-total.md](docs/parte-3-ordem-total.md) |
 | 4 | Coordenação mais leve (sequenciador, cap. 7) | próximas entregas | — |
 
 ## Resultado
 
-4 peers, 10% de perda e 0–60 ms de atraso, disputa de cadeiras em 8 mesas
-(`S.seat_race(rooms: 8)`):
+4 peers, 10% de perda e 0–60 ms de atraso, 30 mensagens por peer:
 
-| `ORDERING` | Perdidas | Posições fora de ordem | Mesas divergentes |
-|---|---|---|---|
-| `none` | 50 | 110 de 110 | 8 de 8 |
-| `fifo` | 0 | 116 de 120 | 8 de 8 |
-
-Sem ordem total, **todas** as mesas da disputa terminaram diferentes entre as réplicas.
+| `ORDERING` | Perdidas | Posições fora de ordem | Mesas divergentes | Msgs de protocolo / multicast |
+|---|---|---|---|---|
+| `none` | 50 | 110 de 110 | 8 de 8 | 4 |
+| `fifo` | 0 | 116 de 120 | 8 de 8 | 4 |
+| `total` (Lamport) | 0 | **0** de 120 | **0** de 8 | 20 (= N + N²) |
 
 ## Arquitetura
 
@@ -137,17 +133,15 @@ as versões acima.
 
 ```bash
 scripts/build_web.sh                       # gera o frontend (uma vez)
-ORDERING=fifo DELAY_MAX=60 scripts/up.sh 3
-# abra http://localhost:4001, :4002 e :4003 (um servidor de jogo em cada)
-
-scripts/run.sh 'S.seat_race(rooms: 8)'     # disputa de cadeiras: réplicas divergem
-scripts/run.sh 'S.games(rooms: 3, duration_ms: 20_000)'   # partidas com bots
-scripts/run.sh 'V.replicas()'              # compara as réplicas
+ORDERING=total LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
+scripts/run.sh 'V.bench(30)'               # 0 posições fora de ordem
+scripts/run.sh 'S.seat_race(rooms: 8)'     # 0 mesas divergentes
+scripts/run.sh 'V.message_cost()'          # 20 mensagens por multicast (N = 4)
 scripts/down.sh
 ```
 
-Na mesa, o painel **⚙ Réplicas** mostra o hash do estado da mesa em cada peer. Para
-jogar pelo celular na mesma rede, use `PEER_HOST=<IP do computador>` e abra pelo IP.
+Compare com `ORDERING=fifo`: mesmo cenário, réplicas divergentes. Na interface, o
+painel **⚙ Réplicas** fica verde com `total`.
 
 ## Testes
 

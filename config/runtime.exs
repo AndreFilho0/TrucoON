@@ -9,7 +9,7 @@ import Config
 #
 #   ROLE           control | peer                           (peer)
 #   CONTROL        rpc | socket — transporte cliente-servidor (rpc)
-#   ORDERING       none | fifo                               (fifo)
+#   ORDERING       none | fifo | total                       (total)
 #   GROUP_SIZE     número de peers no grupo                  (3)
 #   CONTROL_NODE   nome do nó de controle, modo rpc          (control@127.0.0.1)
 #   CONTROL_HOST   IP do nó de controle, modo socket         (127.0.0.1)
@@ -52,7 +52,7 @@ http_port = int.("PORT", 4000)
 config :truco_on,
   role: role,
   control_transport: pick.("CONTROL", "rpc", [:rpc, :socket]),
-  ordering: pick.("ORDERING", "fifo", [:none, :fifo]),
+  ordering: pick.("ORDERING", "total", [:none, :fifo, :total]),
   group_size: int.("GROUP_SIZE", 3),
   control_node: String.to_atom(env.("CONTROL_NODE", "control@127.0.0.1")),
   control_host: env.("CONTROL_HOST", "127.0.0.1"),
