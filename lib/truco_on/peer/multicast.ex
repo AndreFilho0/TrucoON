@@ -2,15 +2,15 @@ defmodule TrucoOn.Peer.Multicast do
   @moduledoc """
   Comunicação **multicast** de um peer sobre **sockets UDP** (`:gen_udp`).
 
-  É o equivalente das threads de envio/recepção do `peerCommunicatorUDP.py`.
-  Nesta parte o comportamento é o do original: cada mensagem vai num
-  datagrama UDP para cada membro, e o que chega é entregue na hora, sem
-  tratar perda nem ordem (modo `:none`).
+  É o equivalente das threads de envio/recepção do `peerCommunicatorUDP.py`,
+  organizado em camadas:
 
-      aplicação (Experiment)
+      aplicação (Replica / Experiment)
             ▲ entregas            │ multicast(payload)
-      política de ordenação  (Basic: entrega o que chegar)
+      política de ordenação  (Basic | Lamport | Sequencer)   — Partes 3 e 4
             ▲                     │
+      canal confiável FIFO   (Reliable: seq, ACK, retransmissão) — Parte 1b
+            ▲                     │      (desligado no modo :none)
       UDP + injeção de falhas (perda e atraso artificiais)
             ▲                     ▼
                   rede (datagramas UDP)
@@ -29,13 +29,18 @@ defmodule TrucoOn.Peer.Multicast do
   ## Formato dos datagramas (`term_to_binary`)
 
       {:r, src, inner}         UDP cru (modo :none)
+      {:d, src, seq, inner}    dado do canal confiável
+      {:a, src, cum}           ACK cumulativo do canal confiável
   """
 
   use GenServer
   require Logger
 
-  alias TrucoOn.Multicast.Ordering
+  alias TrucoOn.Multicast.{Ordering, Reliable}
   alias TrucoOn.Peer
+
+  @tick_ms 25
+  @rto_ms 150
 
   ## API -----------------------------------------------------------------------
 
@@ -75,6 +80,7 @@ defmodule TrucoOn.Peer.Multicast do
     case :gen_udp.open(Keyword.fetch!(opts, :udp_port), sock_opts) do
       {:ok, socket} ->
         {:ok, port} = :inet.port(socket)
+        if Ordering.reliable?(mode), do: :timer.send_interval(@tick_ms, :tick)
 
         state = %{
           inst: opts[:inst],
@@ -89,6 +95,7 @@ defmodule TrucoOn.Peer.Multicast do
           ready: false,
           waiting: [],
           counter: 0,
+          rel: Reliable.new(),
           faults: %{
             loss: opts[:loss] || 0.0,
             delay_min: opts[:delay_min] || 0,
@@ -160,6 +167,8 @@ defmodule TrucoOn.Peer.Multicast do
       ready: state.ready,
       udp_port: state.port,
       faults: state.faults,
+      pending_acks: Reliable.pending(state.rel),
+      held_back: Reliable.held_back(state.rel),
       ordering_queue: if(state.ord, do: state.ord_mod.pending(state.ord), else: 0)
     }
 
@@ -186,7 +195,7 @@ defmodule TrucoOn.Peer.Multicast do
             do: on_packet(state, packet),
             else: bump(state, "recv.unknown_sender")
 
-        # antes do grupo formado o datagrama é descartado (UDP cru: perdido)
+        # antes do grupo formado não sabemos responder; o remetente retransmite
         {:ok, _packet} ->
           bump(state, "recv.before_ready")
 
@@ -197,6 +206,22 @@ defmodule TrucoOn.Peer.Multicast do
     {:noreply, state}
   end
 
+  def handle_info(:tick, %{ready: true} = state) do
+    {rel, late} = Reliable.due(state.rel, now(), @rto_ms)
+    state = %{state | rel: rel}
+
+    state =
+      Enum.reduce(late, state, fn {dest, seq, inner}, st ->
+        st
+        |> bump("sent.retransmissions")
+        |> transmit(dest, {:d, st.my_id, seq, inner})
+      end)
+
+    {:noreply, state}
+  end
+
+  def handle_info(:tick, state), do: {:noreply, state}
+
   def handle_info({:send_later, addr, bin}, state) do
     :gen_udp.send(state.socket, addr, bin)
     {:noreply, state}
@@ -206,6 +231,23 @@ defmodule TrucoOn.Peer.Multicast do
 
   defp on_packet(state, {:r, src, inner}) do
     state |> bump("recv.raw") |> to_ordering(src, inner)
+  end
+
+  defp on_packet(state, {:d, src, seq, inner}) do
+    {rel, delivered, cum, status} = Reliable.on_data(state.rel, src, seq, inner)
+
+    state =
+      %{state | rel: rel}
+      |> bump("recv.data")
+      |> bump("recv.#{status}")
+      |> bump("sent.acks")
+      |> transmit(src, {:a, state.my_id, cum})
+
+    Enum.reduce(delivered, state, fn inner, st -> to_ordering(st, src, inner) end)
+  end
+
+  defp on_packet(state, {:a, src, cum}) do
+    %{state | rel: Reliable.on_ack(state.rel, src, cum)} |> bump("recv.acks")
   end
 
   defp on_packet(state, _other), do: bump(state, "recv.garbage")
@@ -235,7 +277,12 @@ defmodule TrucoOn.Peer.Multicast do
   defp send_inner(state, dest, inner) do
     state = bump(state, "sent.msg.#{elem(inner, 0)}")
 
-    transmit(state, dest, {:r, state.my_id, inner})
+    if Ordering.reliable?(state.mode) do
+      {rel, seq} = Reliable.send(state.rel, dest, inner, now())
+      transmit(%{state | rel: rel}, dest, {:d, state.my_id, seq, inner})
+    else
+      transmit(state, dest, {:r, state.my_id, inner})
+    end
   end
 
   # Envia de fato, aplicando perda e atraso artificiais.
@@ -269,4 +316,6 @@ defmodule TrucoOn.Peer.Multicast do
   end
 
   defp bump(state, key, n \\ 1), do: %{state | stats: Map.update(state.stats, key, n, &(&1 + n))}
+
+  defp now, do: System.monotonic_time(:millisecond)
 end

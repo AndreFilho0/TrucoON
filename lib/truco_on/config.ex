@@ -5,7 +5,7 @@ defmodule TrucoOn.Config do
 
   def role, do: get(:role, :none)
   def control_transport, do: get(:control_transport, :rpc)
-  def ordering, do: get(:ordering, :none)
+  def ordering, do: get(:ordering, :fifo)
   def group_size, do: get(:group_size, 3)
 
   @doc "Opções do peer principal deste nó (instância `:main`)."

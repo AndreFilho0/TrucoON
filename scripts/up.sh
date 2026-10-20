@@ -3,7 +3,7 @@
 # cada um num processo/nó Erlang separado, em segundo plano.
 #
 #   scripts/up.sh [N]                      # 3 peers por padrão
-#   ORDERING=none scripts/up.sh 4      # escolhe o protocolo
+#   ORDERING=fifo scripts/up.sh 4      # escolhe o protocolo
 #   CONTROL=socket scripts/up.sh           # controle por socket TCP (Parte 1a)
 #   LOSS=0.1 DELAY_MAX=80 scripts/up.sh    # perda/atraso em todos os peers
 #   REMOTE_DELAY=150 scripts/up.sh         # o último peer vira "outra região"
@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 N="${1:-3}"
-export ORDERING="${ORDERING:-none}"
+export ORDERING="${ORDERING:-fifo}"
 export CONTROL="${CONTROL:-rpc}"
 export GROUP_SIZE="$N"
 COOKIE="${COOKIE:-trucoon}"

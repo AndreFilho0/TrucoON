@@ -3,12 +3,12 @@ defmodule TrucoOn.Multicast.Ordering do
   Contrato das políticas de ordenação do multicast.
 
   Uma política é uma estrutura de dados pura que fica **acima** do canal
-  (nesta parte, UDP cru: modo `:none`, como no MPComm original):
+  (confiável FIFO, ou UDP cru no modo `:none`):
 
     * `multicast/3` — a aplicação quer enviar `payload` ao grupo. Devolve as
       mensagens que precisam sair: `{destino | :all, mensagem}`.
     * `on_receive/3` — chegou `mensagem` de `src` pelo canal. Devolve novas
-      mensagens para enviar e as **entregas** à
+      mensagens para enviar (ex.: ACKs do Lamport) e as **entregas** à
       aplicação, já na ordem da política.
 
   Separar política (pura) de transporte (GenServer com socket) permite
@@ -27,13 +27,22 @@ defmodule TrucoOn.Multicast.Ordering do
 
   @doc "Módulo da política para cada modo configurável."
   def module(:none), do: TrucoOn.Multicast.Ordering.Basic
+  def module(:fifo), do: TrucoOn.Multicast.Ordering.Basic
+
+  @doc "Se o modo usa o canal confiável FIFO por baixo."
+  def reliable?(:none), do: false
+  def reliable?(_), do: true
 end
 
 defmodule TrucoOn.Multicast.Ordering.Basic do
   @moduledoc """
   Sem coordenação: entrega cada mensagem assim que o canal entrega.
-  Sobre UDP cru (`:none`) as mensagens podem se perder e chegar fora de
-  ordem, exatamente como no MPComm original.
+
+    * Em `:none` o canal é UDP cru ⇒ pode perder e reordenar (o MPComm
+      original).
+    * Em `:fifo` o canal é confiável e FIFO ⇒ sem perdas e na ordem de cada
+      remetente, mas mensagens de remetentes **diferentes** ainda chegam em
+      ordens diferentes em cada peer (não há ordem total).
   """
 
   @behaviour TrucoOn.Multicast.Ordering

@@ -1,0 +1,21 @@
+%% Canal confiável FIFO: perda, fila de espera, retransmissão e ACK cumulativo
+sequenceDiagram
+  autonumber
+  participant A as Remetente
+  participant B as Destinatário (expected = 1)
+
+  A-xB: {:d, A, 1, m1}  (perdido)
+  A->>B: {:d, A, 2, m2}
+  Note right of B: 2 > expected → fila de espera {2}
+  B-->>A: ACK cumulativo 0
+  A->>B: {:d, A, 3, m3}
+  Note right of B: fila de espera {2, 3}
+  B-->>A: ACK cumulativo 0
+  Note left of A: 150 ms sem ACK de 1 → retransmite
+  A->>B: {:d, A, 1, m1}  (retransmissão)
+  Note right of B: entrega m1, m2, m3 em ordem<br/>expected = 4
+  B-->>A: ACK cumulativo 3
+  Note left of A: descarta 1, 2 e 3 da lista de pendentes
+  A->>B: {:d, A, 2, m2}  (duplicata atrasada)
+  Note right of B: 2 < expected → descarta, reenvia ACK
+  B-->>A: ACK cumulativo 3
