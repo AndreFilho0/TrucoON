@@ -1,5 +1,8 @@
 # Diagramas do TrucoON
-
+## perguntar para o professor :
+- O truco online  replicado serve como aplicação da Parte 2, com a ordem das mensagens como critério crítico?
+- Podemos reescrever o MPComm em Elixir/OTP do erlang, com a mesma arquitetura, em vez de partir do código em Python?
+- vamos apresentar só em video para o senhor né ? ao Simular regiões numa máquina, com perda e atraso injetados, basta? Ou devemos rodar em máquinas separadas na nuvem?
 Todos os diagramas para apresentação. Cada um existe em três formatos em
 `docs/diagramas/`:
 
