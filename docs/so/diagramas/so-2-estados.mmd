@@ -1,0 +1,12 @@
+%% Estados de um processo Erlang e as transições feitas pelo escalonador do BEAM
+stateDiagram-v2
+  direction LR
+  [*] --> runnable: spawn
+  runnable --> running: escalonador tira da<br/>frente da fila
+  running --> runnable: gastou 4000 reduções<br/>(preempção) → fim da fila
+  running --> waiting: receive sem mensagem<br/>que case
+  waiting --> runnable: chegou mensagem<br/>ou timeout (timing wheel)
+  running --> exiting: terminou ou<br/>foi morto
+  exiting --> [*]
+  running --> garbing: heap cheio<br/>(GC só deste processo)
+  garbing --> running

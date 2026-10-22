@@ -1,0 +1,43 @@
+%% Dois níveis de escalonamento: o Linux escalona threads, o BEAM escalona processos Erlang
+flowchart TB
+  subgraph HW["Hardware: CPU com N núcleos"]
+    C0["núcleo 1"]:::hw
+    C1["núcleo 2"]:::hw
+    C7["... núcleo N"]:::hw
+  end
+
+  KERN["<b>Linux (EEVDF)</b><br/>escalona as THREADS do SO<br/><i>não sabe que processos Erlang existem</i>"]:::os
+
+  subgraph BEAM["Processo do SO: beam.smp de um peer (1 PID, várias threads)"]
+    direction TB
+    S1["erts_sched_1<br/><i>escalonador 1</i>"]:::sched
+    S2["erts_sched_2<br/><i>escalonador 2</i>"]:::sched
+    S8["... erts_sched_N"]:::sched
+    AUX["threads auxiliares<br/>(dirty, poll de E/S, ...)"]:::aux
+
+    subgraph RQ1["fila do escalonador 1"]
+      P1(("Replica")):::proc
+      P2(("RoomChannel<br/>Ana")):::proc
+      P3(("Multicast")):::proc
+    end
+    subgraph RQ2["fila do escalonador 2"]
+      P4(("RoomChannel<br/>Bia")):::proc
+      P5(("Membership")):::proc
+      P6(("... milhares<br/>de processos")):::proc
+    end
+    S1 --> RQ1
+    S2 --> RQ2
+  end
+
+  OTHERS["beam.smp do controle, do peer 2 e do peer 3<br/><i>cada um com seus N escalonadores</i>"]:::os2
+
+  HW --- KERN
+  KERN -->|"threads do SO"| S1 & S2 & S8 & AUX
+  KERN -->|"threads do SO"| OTHERS
+
+  classDef hw fill:#E5E7EB,stroke:#374151,color:#111
+  classDef os fill:#DBEAFE,stroke:#1D4ED8,color:#111
+  classDef os2 fill:#EFF6FF,stroke:#1D4ED8,color:#111,stroke-dasharray:4 3
+  classDef sched fill:#FEF3C7,stroke:#B45309,color:#111
+  classDef aux fill:#F3F4F6,stroke:#6B7280,color:#111
+  classDef proc fill:#DCFCE7,stroke:#15803D,color:#111
