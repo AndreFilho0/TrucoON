@@ -146,14 +146,7 @@ elixir --version        # Elixir 1.17.1 (compiled with Erlang/OTP 27)
 node --version          # v22.5.1
 ```
 
-**5. Ferramentas do Elixir e dependências do projeto (só na primeira vez)**
-
-```bash
-mix local.hex --force
-mix local.rebar --force
-mix deps.get
-scripts/build_web.sh    # instala os pacotes do app/ (npm) e gera o frontend
-```
+Agora siga para [Preparando o projeto](#preparando-o-projeto-primeira-vez).
 
 ### Sem asdf
 
@@ -162,9 +155,35 @@ erlang nodejs npm` (Linux), mas essas versões costumam ser diferentes das testa
 O projeto aceita Elixir 1.14 ou mais novo (`mix.exs`); se algo falhar, use o asdf com
 as versões acima.
 
+### Preparando o projeto (primeira vez)
+
+Vale para qualquer forma de instalação (com ou sem asdf). Depois de clonar o
+repositório, na pasta do projeto:
+
+```bash
+# 1. Backend: ferramentas do Elixir e dependências (Phoenix, Bandit, ...)
+mix local.hex --force
+mix local.rebar --force
+mix deps.get
+
+# 2. Frontend: dependências do app/ (npm) e export para priv/static
+cd app && npm install && cd ..
+scripts/build_web.sh
+```
+
+> **Não pule estes passos.** As pastas `deps/`, `app/node_modules/` e `priv/static/`
+> não vão para o git, então um clone novo não tem nenhuma delas:
+>
+> - sem o `mix deps.get`, o `scripts/up.sh` falha ao compilar;
+> - sem o `scripts/build_web.sh`, os peers sobem, mas `http://localhost:4001` mostra só
+>   *"TrucoON peer no ar. Frontend não exportado (rode scripts/build_web.sh)."*
+
+Repita o `mix deps.get` quando o `mix.lock` mudar, o `npm install` quando o
+`app/package-lock.json` mudar, e o `scripts/build_web.sh` sempre que mudar algo em `app/`.
+
 ## Como rodar
 
-Com tudo instalado (seção anterior):
+Com tudo instalado e o projeto preparado (seção anterior):
 
 ```bash
 ORDERING=total scripts/up.sh 3        # controle + 3 peers em segundo plano
@@ -175,8 +194,8 @@ scripts/down.sh                       # para tudo
 ```
 
 Os peers levam uns 10 segundos para se registrar e formar o grupo; na tela inicial a
-bolinha fica verde quando o grupo está pronto. Depois de mudar algo em `app/`, rode
-`scripts/build_web.sh` de novo.
+bolinha fica verde quando o grupo está pronto. Se algo não subir, veja os logs em
+`tmp/run/*.log`.
 
 ### Jogando pelo celular (mesma rede Wi-Fi)
 
