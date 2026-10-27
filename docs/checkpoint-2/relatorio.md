@@ -27,7 +27,8 @@ de truco, e o efeito disso aparece no jogo.
   de ferro, partida até 12 tentos) escritas como **funções puras**:
   `lib/truco_on/truco/` (`deck.ex`, `evaluator.ex`, `rules.ex`, `game.ex`).
 - Frontend em `app/` (Expo + React Native Web), servido por cada peer.
-- Diagrama: `docs/diagramas/2-arquitetura.png`.
+
+![Arquitetura do TrucoON](../diagramas/2-arquitetura.png)
 
 ## 3. Replicação por máquina de estados
 
@@ -45,7 +46,9 @@ de truco, e o efeito disso aparece no jogo.
   e aplica.
 - Ponto central: o servidor **não aplica** a jogada do próprio jogador na hora. Ele
   manda para o grupo, espera a entrega pelo multicast como todo mundo, e só então
-  responde. Diagrama: `docs/diagramas/2-fluxo-comando.png`.
+  responde.
+
+![Caminho de uma jogada](../diagramas/2-fluxo-comando.png)
 
 **No jogo.**
 - Cada servidor de jogo (uma "região") tem uma cópia completa de todas as mesas.
@@ -85,12 +88,13 @@ de truco, e o efeito disso aparece no jogo.
 
 **No jogo.** Três situações em que as réplicas divergem:
 1. **Disputa de cadeira:** Bia e Caio pedem a cadeira 0 ao mesmo tempo, por servidores
-   diferentes. Cada réplica dá a cadeira para quem chegou primeiro nela. Diagrama:
-   `docs/diagramas/2-divergencia.png`.
+   diferentes. Cada réplica dá a cadeira para quem chegou primeiro nela.
 2. **Truco × carta:** Ana joga a carta que fecha a mão enquanto Duda pede truco. Numa
    réplica a mão vale 3; na outra, vale 1. O placar diverge.
 3. **Aceito × fujo no 2x2:** os dois parceiros respondem ao truco ao mesmo tempo, com
    respostas diferentes.
+
+![Disputa de cadeira sem ordem total](../diagramas/2-divergencia.png)
 
 ## 6. Sincronização dentro do servidor: um único escritor
 
@@ -118,7 +122,8 @@ de truco, e o efeito disso aparece no jogo.
   multicast cai, os processos que dependem dele são reiniciados junto.
 - Cada jogador conectado é um processo (`lib/truco_on_web/channels/room_channel.ex`).
   Se ele cai, morre sozinho e não afeta os outros.
-- Diagrama: `docs/diagramas/2-supervisao.png`.
+
+![Árvore de supervisão de um peer](../diagramas/2-supervisao.png)
 
 **No jogo.**
 - A conexão de um jogador caindo não derruba a mesa nem o servidor.
