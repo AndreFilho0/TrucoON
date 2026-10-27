@@ -38,7 +38,7 @@ de entrar nos tópicos.
 | 2 (19/11) | O que acontece com o jogo quando a ordem das mensagens varia? | 2 (truco replicado) |
 | 3 (26/11) | Como fazer todos concordarem com a ordem? | 3 (Lamport) e 4 (sequenciador) |
 
-Diagrama: `docs/diagramas/1a-visao-geral.png`.
+![Visão geral: nó de controle e grupo de peers](../diagramas/1a-visao-geral.png)
 
 ## 2. Processos e troca de mensagens
 
@@ -104,6 +104,8 @@ Diagrama: `docs/diagramas/1a-visao-geral.png`.
   Erlang nos dois lados e dá acesso a qualquer função do nó remoto; o socket funciona
   com qualquer linguagem e expõe só o que `handle/2` aceita.
 
+![O mesmo pedido por socket TCP e por RPC](../diagramas/1a-socket-vs-rpc.png)
+
 **No jogo.**
 - O nó de controle usa RPC (ou socket) para comandar os servidores de jogo: iniciar
   experimentos, coletar logs, mudar a perda de pacotes em tempo real.
@@ -150,7 +152,10 @@ Diagrama: `docs/diagramas/1a-visao-geral.png`.
     contíguas e responde com ACK cumulativo.
 - Formato dos datagramas: `{:d, origem, seq, msg}`, `{:a, origem, cum}`,
   `{:r, origem, msg}`.
-- Diagramas: `docs/diagramas/1b-perda-retransmissao.png` e `1b-camadas-peer.png`.
+
+![Perda, fila de espera, retransmissão e ACK cumulativo](../diagramas/1b-perda-retransmissao.png)
+
+![Camadas do multicast dentro de um peer](../diagramas/1b-camadas-peer.png)
 
 **No jogo.**
 - As jogadas de um mesmo jogador chegam na ordem certa em todos os servidores: se ele
