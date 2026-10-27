@@ -1,8 +1,14 @@
 # Checkpoint 2 (19/11): o jogo replicado e por que a ordem importa
 
 **Disciplinas:** Sistemas Operacionais e Sistemas Distribuídos (INF0344), UFG, 2026/2
-**Grupo:** <nomes e matrículas>
-**Código deste checkpoint:** tag `parte-2` (Parte 2 do enunciado)
+**Equipe:** ZAP
+**Participantes:**
+- André de Oliveira Machado Filho (202406913)
+- Alan Queiroz Dantas de Oliveira (202109882)
+- Stephany Jorge Araújo Resque (202400316)
+- Jamilly Vitorya da Silva Barbosa (202103736)
+
+**Código deste checkpoint:** tag `parte-2`
 
 Cada tópico segue a mesma estrutura:
 
@@ -32,7 +38,7 @@ de truco, e o efeito disso aparece no jogo.
 
 ## 3. Replicação por máquina de estados
 
-**Teoria.**
+**Teoria.** [2, cap. 7]
 - Replicar um serviço em vários processos para ficar perto dos usuários e tolerar
   falhas.
 - Máquina de estados replicada: se todas as réplicas começam no mesmo estado e
@@ -48,7 +54,7 @@ de truco, e o efeito disso aparece no jogo.
   manda para o grupo, espera a entrega pelo multicast como todo mundo, e só então
   responde.
 
-![Caminho de uma jogada](../diagramas/2-fluxo-comando.png)
+![Caminho de uma jogada](diagramas/fluxo-comando.png)
 
 **No jogo.**
 - Cada servidor de jogo (uma "região") tem uma cópia completa de todas as mesas.
@@ -56,16 +62,16 @@ de truco, e o efeito disso aparece no jogo.
 
 ## 4. Determinismo
 
-**Teoria.**
+**Teoria.** [2, cap. 7]
 - A replicação por máquina de estados só funciona se aplicar um comando der sempre o
   mesmo resultado. Relógio local, números aleatórios e timers quebram isso.
 
 **Na implementação.**
 - Embaralhamento com gerador pseudoaleatório de estado explícito
   (`:rand.seed_s/2`), com a semente enviada no comando `:create` (`truco/deck.ex`).
-- Sem timers nem relógio: o servidor de jogo original do melivra tinha timeout de
-  abandono e limite de requisições pelo relógio local. Aqui tudo que muda o estado é
-  comando.
+- Sem timers nem relógio: um servidor de jogo comum teria timeout de abandono e limite
+  de requisições pelo relógio local, e cada réplica veria esse tempo esgotar num
+  momento diferente. Aqui tudo que muda o estado é comando.
 - Código da mesa sorteado por quem cria e enviado no comando. Se colidir, todas as
   réplicas rejeitam igual (`:code_taken`).
 
@@ -74,7 +80,7 @@ de truco, e o efeito disso aparece no jogo.
 
 ## 5. Condição de corrida: por que a ordem é crítica
 
-**Teoria.**
+**Teoria.** [1, cap. 2], [2, cap. 7]
 - SO: condição de corrida, quando o resultado depende da ordem em que processos
   concorrentes acessam um dado compartilhado; seção crítica.
 - SD: o mesmo problema entre réplicas. Comandos concorrentes chegam em ordens
@@ -98,7 +104,7 @@ de truco, e o efeito disso aparece no jogo.
 
 ## 6. Sincronização dentro do servidor: um único escritor
 
-**Teoria.**
+**Teoria.** [1, cap. 2], [3]
 - SO: exclusão mútua (mutex, semáforo) e o problema dos **leitores e escritores**.
 
 **Na implementação.**
@@ -114,8 +120,10 @@ de truco, e o efeito disso aparece no jogo.
 
 ## 7. Processos, supervisão e tolerância a falhas
 
-**Teoria.**
+**Teoria.** [1, cap. 2], [4]
 - SO: hierarquia de processos (pai e filho), término e tratamento de falhas.
+- Erlang/OTP: processos isolados que podem falhar sozinhos ("deixe falhar") e
+  supervisores que os reiniciam.
 
 **Na implementação.**
 - Árvore de supervisão OTP: `lib/truco_on/peer.ex` com estratégia `rest_for_one`. Se o
@@ -123,14 +131,14 @@ de truco, e o efeito disso aparece no jogo.
 - Cada jogador conectado é um processo (`lib/truco_on_web/channels/room_channel.ex`).
   Se ele cai, morre sozinho e não afeta os outros.
 
-![Árvore de supervisão de um peer](../diagramas/2-supervisao.png)
+![Árvore de supervisão de um peer](diagramas/supervisao.png)
 
 **No jogo.**
 - A conexão de um jogador caindo não derruba a mesa nem o servidor.
 
 ## 8. Com estado × sem estado
 
-**Teoria.**
+**Teoria.** [2, cap. 3]
 - Servidores sem estado escalam e se recuperam fácil; servidores com estado guardam
   sessão e dados.
 
@@ -160,22 +168,7 @@ de truco, e o efeito disso aparece no jogo.
 - O painel **⚙ Réplicas** da interface mostra os hashes ao vivo: verde quando as
   cópias são iguais, vermelho quando divergiram.
 
-## 10. Melhorias no código-base do MPComm
-
-| MPComm | TrucoON |
-|---|---|
-| IPs fixos em `constMP.py` | variáveis de ambiente |
-| `unregister` não implementado | implementado |
-| `recv(2048)` pode truncar | prefixo de tamanho (`packet: 4`) |
-| Espera ativa (100% de CPU) | timers |
-| `pickle.loads` em dados da rede | `binary_to_term(bin, [:safe])` |
-| Comparação ignora o último peer | compara tudo + perdas, duplicatas, FIFO |
-| Processos soltos | supervisores OTP |
-| Sem testes | testes automatizados com peers reais |
-
-Lista completa: `docs/parte-2-aplicacao.md`.
-
-## 11. Demonstração prática
+## 10. Demonstração prática
 
 ```bash
 scripts/build_web.sh
@@ -188,17 +181,18 @@ ORDERING=fifo DELAY_MAX=60 scripts/up.sh 3
 3. Todos tocam em "Sentar" ao mesmo tempo, ou `scripts/run.sh 'S.seat_race(rooms: 8)'`.
 4. O painel fica vermelho: as réplicas divergiram.
 
-## 12. Conclusão e gancho para o checkpoint 3
+## 11. Conclusão
 
-O jogo funciona enquanto as jogadas não são concorrentes. Quando duas jogadas
-acontecem ao mesmo tempo em servidores diferentes, cada cópia decide de um jeito, e o
-FIFO não resolve. Falta garantir que **todos os servidores apliquem as jogadas na
-mesma ordem**: é o tema do checkpoint 3.
+- O jogo é uma máquina de estados replicada: regras puras e determinísticas, um único
+  escritor por servidor, e o estado de cada réplica depende só da ordem dos comandos.
+- Enquanto as jogadas não são concorrentes, as réplicas ficam iguais.
+- Quando duas jogadas acontecem ao mesmo tempo em servidores diferentes, cada cópia
+  decide de um jeito, e o FIFO não impede isso: 8 de 8 mesas divergem na disputa de
+  cadeiras.
 
 ## Referências
 
-- A. S. Tanenbaum e M. van Steen, *Distributed Systems*, cap. 7 (Consistência e
-  replicação).
-- A. S. Tanenbaum e H. Bos, *Sistemas Operacionais Modernos*, cap. 2 (condições de
-  corrida, exclusão mútua, leitores e escritores).
-- Documento técnico: `docs/parte-2-aplicacao.md`.
+- [1] TANENBAUM, A. S.; BOS, H. *Sistemas Operacionais Modernos*. 4. ed. Pearson, 2016.
+- [2] VAN STEEN, M.; TANENBAUM, A. S. *Distributed Systems*. 4. ed. 2023 (distributed-systems.net).
+- [3] STENMAN, E. *The BEAM Book: Understanding the Erlang Runtime System*. https://blog.stenmans.org/theBeamBook/
+- [4] ARMSTRONG, J. *Making reliable distributed systems in the presence of software errors*. Tese (Doutorado), KTH, 2003.
