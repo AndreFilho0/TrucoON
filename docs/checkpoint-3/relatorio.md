@@ -57,7 +57,8 @@ Duas soluções: uma distribuída (Lamport) e uma centralizada (sequenciador).
   mensagens ainda desconhecidas também são guardados.
 - A premissa "canal confiável e FIFO" é a camada do checkpoint 1 (`reliable.ex`): uma
   camada apoia a outra.
-- Diagrama: `docs/diagramas/3-lamport.png`.
+
+![Lamport: mensagem e ACKs](../diagramas/3-lamport.png)
 
 **No jogo.**
 - Bia e Caio pedindo a mesma cadeira ao mesmo tempo: todos os servidores ordenam os
@@ -96,7 +97,8 @@ Duas soluções: uma distribuída (Lamport) e uma centralizada (sequenciador).
 - O sequenciador é o peer de menor id (`GET /api/info` mostra qual é).
 - Como todas as `{:ord, ...}` saem de um único remetente por canal FIFO, todos recebem
   na mesma ordem.
-- Diagrama: `docs/diagramas/4-sequenciador.png`.
+
+![Sequenciador: N + 1 mensagens](../diagramas/4-sequenciador.png)
 
 **No jogo.**
 - Um servidor funciona como o "juiz da mesa": decide a ordem das jogadas, e os outros
@@ -116,7 +118,8 @@ Duas soluções: uma distribuída (Lamport) e uma centralizada (sequenciador).
 | Gargalo | não | sim |
 
 Com 10 servidores: Lamport gasta 110 mensagens por jogada, o sequenciador 11.
-Diagrama: `docs/diagramas/4-custo.png`.
+
+![Custo em mensagens por tamanho do grupo](../diagramas/4-custo.png)
 
 ## 7. Limitações e extensões
 
