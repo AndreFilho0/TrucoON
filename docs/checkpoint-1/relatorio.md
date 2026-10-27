@@ -1,8 +1,14 @@
 # Checkpoint 1 (05/11): como processos conversam
 
 **Disciplinas:** Sistemas Operacionais e Sistemas Distribuídos (INF0344), UFG, 2026/2
-**Grupo:** <nomes e matrículas>
-**Código deste checkpoint:** tag `parte-1b` (Partes 1a e 1b do enunciado)
+**Equipe:** ZAP
+**Participantes:**
+- André de Oliveira Machado Filho (202406913)
+- Alan Queiroz Dantas de Oliveira (202109882)
+- Stephany Jorge Araújo Resque (202400316)
+- Jamilly Vitorya da Silva Barbosa (202103736)
+
+**Código deste checkpoint:** tag `parte-1b`
 
 Cada tópico segue a mesma estrutura:
 
@@ -14,56 +20,51 @@ Cada tópico segue a mesma estrutura:
 
 ## 1. Contexto: o que é o TrucoON
 
-Primeira apresentação para a turma, então esta seção explica o projeto inteiro antes
-de entrar nos tópicos.
+Primeira apresentação para a turma, então esta seção explica o projeto antes de entrar
+nos tópicos.
 
 - **O jogo:** truco mineiro online para partidas privadas (1x1 ou 2x2). Uma pessoa
   cria a mesa, manda o link ou o QR code para os amigos e eles jogam pelo navegador.
-- **O ponto de partida:** o MPComm do Prof. Fábio M. Costa, em Python. Um grupo de
-  processos troca mensagens por multicast e mostra que, sem coordenação, cada
-  processo recebe as mensagens numa ordem diferente.
-- **A ideia:** dar significado a essas mensagens. Cada processo (peer) é um
-  **servidor de jogo** de uma "região" e guarda uma cópia de todas as mesas. Cada
-  mensagem é uma **jogada**. Se as cópias aplicam as jogadas em ordens diferentes, o
-  jogo fica inconsistente: dois jogadores na mesma cadeira, um truco aceito num
-  servidor e rejeitado no outro.
+- **A ideia:** o jogo roda em vários **servidores**, um por região, e cada um guarda
+  uma cópia das mesas. Os servidores formam um grupo de processos que troca mensagens
+  pela rede, e cada mensagem é uma **jogada**. Para todos os servidores mostrarem o
+  mesmo jogo, essas mensagens precisam chegar sem se perder e na ordem certa.
 - **Por que Elixir/Erlang:** a máquina virtual do Erlang (BEAM) foi feita para
-  processos que só se comunicam por mensagens. É o mesmo modelo do trabalho, aplicado
-  dentro de cada máquina e entre máquinas.
-- **Os três checkpoints:**
+  processos isolados que só se comunicam por mensagens [3, 4]. É o mesmo modelo do
+  trabalho, aplicado dentro de cada máquina e entre máquinas.
+- **Objetivo deste checkpoint:** construir a base de comunicação do grupo:
+  - um **nó de controle** que registra os servidores e coordena experimentos, falando
+    com eles por **socket TCP** ou por **RPC**;
+  - um **multicast sobre UDP** entre os servidores, primeiro sem tratamento nenhum e
+    depois com um **canal confiável e FIFO**.
 
-| Checkpoint | Pergunta | Partes |
-|---|---|---|
-| 1 (05/11) | Como os processos conversam? | 1a (socket × RPC) e 1b (perda e FIFO) |
-| 2 (19/11) | O que acontece com o jogo quando a ordem das mensagens varia? | 2 (truco replicado) |
-| 3 (26/11) | Como fazer todos concordarem com a ordem? | 3 (Lamport) e 4 (sequenciador) |
-
-![Visão geral: nó de controle e grupo de peers](../diagramas/1a-visao-geral.png)
+![Visão geral: nó de controle e grupo de peers](diagramas/visao-geral.png)
 
 ## 2. Processos e troca de mensagens
 
-**Teoria.**
+**Teoria.** [1, cap. 2], [3], [4]
 - SO: processo, espaço de endereçamento, estados (pronto, executando, bloqueado),
   comunicação entre processos (IPC) por memória compartilhada ou por troca de mensagens.
 - SD: num sistema distribuído não existe memória compartilhada; só existe troca de
   mensagens pela rede.
+- Espera ativa (um laço testando uma condição) × bloqueio: o processo bloqueado sai da
+  fila de prontos e não gasta CPU.
 
 **Na implementação.**
 - Cada peer é **um processo do SO** (`beam.smp`). Dentro dele, a BEAM roda processos
   leves, cada um com seu heap, que só se comunicam por `send`/`receive`.
-- Um processo que espera uma mensagem fica bloqueado e não gasta CPU. O MPComm
-  original fazia **espera ativa** (`while handShakeCount < N: pass`, 100% de um
-  núcleo); o TrucoON usa timers (`Process.send_after`).
+- Nenhum processo fica em espera ativa. Quem espera uma mensagem fica bloqueado no
+  `receive`; quem precisa esperar um tempo usa timers (`Process.send_after`).
 - Árvore de processos do peer: `lib/truco_on/peer.ex` (supervisor).
 
 **No jogo.**
-- Cada servidor de jogo é um processo do SO. No checkpoint 2, cada jogador conectado
-  vira um processo leve, e a cópia das mesas, outro. O modelo de "processos que só
-  trocam mensagens" vale dentro da máquina e entre as máquinas.
+- Cada servidor de jogo é um processo do SO, e dentro dele cada tarefa (rede, controle,
+  registro no grupo) é um processo leve. O modelo de "processos que só trocam
+  mensagens" vale dentro da máquina e entre as máquinas.
 
 ## 3. Modelo cliente-servidor com sockets TCP
 
-**Teoria.**
+**Teoria.** [1], [2, cap. 4]
 - Socket como ponto de comunicação do SO: `socket`, `bind`, `listen`, `accept`,
   `connect`, `send`/`recv`. As chamadas de sistema passam pelos buffers do kernel.
 - TCP é um fluxo de bytes: quem programa precisa delimitar as mensagens
@@ -72,23 +73,26 @@ de entrar nos tópicos.
 
 **Na implementação.**
 - `lib/truco_on/control/socket_server.ex`: `:gen_tcp.listen` com `packet: 4`
-  (prefixo de 4 bytes com o tamanho) e `active: false` (o processo chama `recv` e
-  bloqueia).
-- Serialização com `:erlang.term_to_binary/1`, o equivalente do `pickle`. Na leitura,
-  `binary_to_term(bin, [:safe])`: o `pickle.loads` do original permite executar
-  código remoto.
-- Correção em relação ao MPComm: `recv(2048)` podia truncar respostas grandes.
+  (prefixo de 4 bytes com o tamanho de cada mensagem) e `active: false` (o processo
+  chama `recv` e bloqueia). Sem o prefixo, uma leitura de tamanho fixo pode truncar
+  mensagens grandes.
+- Serialização com `:erlang.term_to_binary/1`. Na leitura,
+  `binary_to_term(bin, [:safe])`, que recusa termos que criariam átomos novos ou
+  referências a funções. Desserializar dados da rede sem esse cuidado pode permitir
+  executar código remoto.
+- Pedido desconhecido recebe uma resposta de erro, em vez de deixar o cliente
+  esperando para sempre.
 
 **No jogo.**
 - O **nó de controle** (`GroupManager`) é o servidor onde os servidores de jogo se
-  registram e descobrem os outros. Sem ele, um peer não sabe para quem mandar as
+  registram e descobrem os outros. Sem ele, um servidor não sabe para quem mandar as
   jogadas.
 
 ## 4. RPC: chamada de procedimento remoto
 
-**Teoria.**
+**Teoria.** [2, cap. 4]
 - RPC esconde a rede atrás de uma chamada de função: stubs, empacotamento dos
-  parâmetros (*marshalling*) e transparência de acesso (Tanenbaum & van Steen, cap. 4).
+  parâmetros (*marshalling*) e transparência de acesso.
 - Uma chamada remota pode falhar de formas que uma chamada local não falha: rede fora,
   servidor caído, timeout.
 
@@ -97,24 +101,35 @@ de entrar nos tópicos.
   (`:erpc.call`), conforme a variável `CONTROL`.
 - Os dois transportes chegam **na mesma função** `handle/2` no servidor, então a
   comparação é justa: só o transporte muda.
-- Medição (`V.transport_benchmark(300)`): socket 143 µs × RPC 28 µs de média. O RPC
-  ganha porque o Erlang mantém uma conexão TCP aberta entre os nós; o socket abre e
-  fecha uma conexão por pedido, como o original.
-- Vantagens e desvantagens: ver `docs/parte-1a-rpc.md`. Pontos principais: o RPC exige
-  Erlang nos dois lados e dá acesso a qualquer função do nó remoto; o socket funciona
-  com qualquer linguagem e expõe só o que `handle/2` aceita.
+- Medição (`V.transport_benchmark(300)`, 300 pedidos para cada um de 3 peers):
+
+| Transporte | Média | Mediana | p99 |
+|---|---|---|---|
+| Socket TCP (uma conexão por pedido) | 143 µs | 133 µs | 203 µs |
+| RPC (`:erpc`) | 28 µs | 27 µs | 56 µs |
+
+- O RPC ganha porque o Erlang mantém uma conexão TCP aberta entre os nós; o socket
+  abre e fecha uma conexão (handshake de 3 vias) a cada pedido.
+
+| | RPC | Socket |
+|---|---|---|
+| Código | chamada parece local; o runtime cuida de conexão, serialização e erros | conexão, enquadramento e serialização feitos à mão |
+| Erros | exceção, timeout e nó fora do ar voltam como erro para quem chamou | é preciso tratar cada caso no código |
+| Plataforma | os dois lados precisam ser nós Erlang com o mesmo *cookie* | funciona entre quaisquer linguagens |
+| Segurança | quem tem o cookie executa **qualquer** função no nó remoto | expõe só o que `handle/2` aceita |
+| Implantação | exige a porta 4369 (epmd) e uma faixa de portas abertas | uma porta por serviço |
 
 ![O mesmo pedido por socket TCP e por RPC](../diagramas/1a-socket-vs-rpc.png)
 
 **No jogo.**
 - O nó de controle usa RPC (ou socket) para comandar os servidores de jogo: iniciar
-  experimentos, coletar logs, mudar a perda de pacotes em tempo real.
-- O navegador do jogador não fala RPC do Erlang. Por isso o jogador usa HTTP e
-  WebSocket (checkpoint 2). É o "acoplamento de plataforma" do RPC na prática.
+  experimentos, coletar resultados, mudar a perda de pacotes em tempo real.
+- O navegador do jogador não fala RPC do Erlang, então o jogador precisa de outro
+  protocolo (HTTP e WebSocket). É o "acoplamento de plataforma" do RPC na prática.
 
 ## 5. Multicast sobre UDP: perda, atraso e reordenação
 
-**Teoria.**
+**Teoria.** [2, cap. 4]
 - UDP entrega datagramas sem garantia: podem se perder, chegar duplicados ou fora de
   ordem.
 - Multicast em nível de aplicação: enviar a mesma mensagem para N processos com N
@@ -127,8 +142,7 @@ de entrar nos tópicos.
 - **Injeção de falhas** para simular regiões diferentes numa máquina só: `LOSS`
   (probabilidade de descarte) e `DELAY_MIN`/`DELAY_MAX` (atraso aleatório, que causa
   reordenação). Muda em tempo real com `V.faults/3`.
-- `ORDERING=none` é o comportamento do MPComm original: entrega o que chegar, na ordem
-  em que chegar.
+- `ORDERING=none`: entrega o que chegar, na ordem em que chegar, sem tratamento.
 
 **No jogo.**
 - Cada jogada é enviada para todos os servidores. Uma jogada perdida deixa uma cópia
@@ -136,7 +150,7 @@ de entrar nos tópicos.
 
 ## 6. Canal confiável e ordem FIFO
 
-**Teoria.**
+**Teoria.** [2, cap. 8]
 - Confiabilidade sobre um canal não confiável: número de sequência, confirmação (ACK),
   retransmissão por tempo esgotado.
 - ACK cumulativo ("recebi tudo até n") e fila de espera (*hold-back queue*) para
@@ -155,7 +169,7 @@ de entrar nos tópicos.
 
 ![Perda, fila de espera, retransmissão e ACK cumulativo](../diagramas/1b-perda-retransmissao.png)
 
-![Camadas do multicast dentro de um peer](../diagramas/1b-camadas-peer.png)
+![Camadas do multicast dentro de um peer](diagramas/camadas-peer.png)
 
 **No jogo.**
 - As jogadas de um mesmo jogador chegam na ordem certa em todos os servidores: se ele
@@ -167,8 +181,8 @@ de entrar nos tópicos.
 
 | `ORDERING` | Perdidas | Duplicadas | Violações FIFO | Posições fora de ordem |
 |---|---|---|---|---|
-| `none` (MPComm original) | 50 | 0 | 28 | 110 de 110 |
-| `fifo` (Parte 1b) | **0** | **0** | **0** | 116 de 120 |
+| `none` (sem tratamento) | 50 | 0 | 28 | 110 de 110 |
+| `fifo` (canal confiável) | **0** | **0** | **0** | 116 de 120 |
 
 Custo do canal confiável: ~9,3 datagramas UDP por multicast (dados, ACKs e
 retransmissões), contra 4 no modo sem tratamento.
@@ -189,17 +203,20 @@ scripts/down.sh
 Testes: `test/truco_on/multicast/protocols_test.exs` (rede simulada com 30% de perda)
 e `test/truco_on/integration/group_test.exs`, blocos "Parte 1a" e "Parte 1b".
 
-## 9. Conclusão e gancho para o checkpoint 2
+## 9. Conclusão
 
-O FIFO resolve perda e ordem **de cada remetente**, mas mensagens de remetentes
-diferentes continuam chegando em ordens diferentes em cada servidor (116 de 120
-posições fora de ordem). No checkpoint 2 essas mensagens passam a ser jogadas, e essa
-diferença de ordem quebra o jogo.
+- Socket e RPC resolvem a mesma comunicação cliente-servidor. O RPC dá menos código e
+  melhor tratamento de erros; o socket dá independência de plataforma e controle sobre
+  o que é exposto.
+- O canal confiável zera perdas, duplicatas e violações de FIFO, pagando com mais
+  datagramas por mensagem.
+- O FIFO garante a ordem **de cada remetente**, mas não uma ordem igual para todos:
+  mensagens de remetentes diferentes ainda chegam em ordens diferentes em cada
+  servidor (116 de 120 posições).
 
 ## Referências
 
-- A. S. Tanenbaum e M. van Steen, *Distributed Systems*, cap. 4 (Comunicação).
-- A. S. Tanenbaum e H. Bos, *Sistemas Operacionais Modernos*, cap. 2 (Processos e
-  threads, comunicação entre processos).
-- MPComm: https://github.com/professorfabio/MPComm
-- Documentos técnicos: `docs/parte-1a-rpc.md`, `docs/parte-1b-perda-fifo.md`.
+- [1] TANENBAUM, A. S.; BOS, H. *Sistemas Operacionais Modernos*. 4. ed. Pearson, 2016.
+- [2] VAN STEEN, M.; TANENBAUM, A. S. *Distributed Systems*. 4. ed. 2023 (distributed-systems.net).
+- [3] STENMAN, E. *The BEAM Book: Understanding the Erlang Runtime System*. https://blog.stenmans.org/theBeamBook/
+- [4] ARMSTRONG, J. *Making reliable distributed systems in the presence of software errors*. Tese (Doutorado), KTH, 2003.
