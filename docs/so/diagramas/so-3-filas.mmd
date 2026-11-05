@@ -1,0 +1,28 @@
+%% Filas de prontos de um escalonador do BEAM e balanceamento entre escalonadores
+flowchart LR
+  subgraph S1["Escalonador 1 (thread erts_sched_1)"]
+    direction TB
+    MAX["fila <b>max</b><br/><i>sempre primeiro</i>"]:::q
+    HIGH["fila <b>high</b><br/><i>se max vazia</i>"]:::q
+    NORM["fila <b>normal + low</b><br/>FIFO, round-robin<br/><i>low só roda a cada 8 passagens</i>"]:::q
+    CPU1["executa 1 processo<br/>por até <b>4000 reduções</b>"]:::run
+    MAX --> CPU1
+    HIGH --> CPU1
+    NORM --> CPU1
+    CPU1 -->|"preemptado: volta<br/>para o fim da fila"| NORM
+  end
+
+  subgraph S2["Escalonador 2 (fila vazia)"]
+    CPU2["sem trabalho"]:::idle
+  end
+
+  subgraph S3["Escalonador 3 (sobrecarregado)"]
+    Q3["fila longa"]:::q
+  end
+
+  Q3 -.->|"<b>roubo de tarefa</b><br/>(work stealing)<br/>quem está ocioso pega"| CPU2
+  Q3 -.->|"<b>migração</b> planejada a cada<br/>2000 × 4000 reduções<br/>(check_balance)"| NORM
+
+  classDef q fill:#FEF3C7,stroke:#B45309,color:#111
+  classDef run fill:#DCFCE7,stroke:#15803D,color:#111
+  classDef idle fill:#F3F4F6,stroke:#6B7280,color:#111

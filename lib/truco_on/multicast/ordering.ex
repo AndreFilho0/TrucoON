@@ -28,6 +28,8 @@ defmodule TrucoOn.Multicast.Ordering do
   @doc "Módulo da política para cada modo configurável."
   def module(:none), do: TrucoOn.Multicast.Ordering.Basic
   def module(:fifo), do: TrucoOn.Multicast.Ordering.Basic
+  def module(:total), do: TrucoOn.Multicast.Ordering.Lamport
+  def module(:sequencer), do: TrucoOn.Multicast.Ordering.Sequencer
 
   @doc "Se o modo usa o canal confiável FIFO por baixo."
   def reliable?(:none), do: false

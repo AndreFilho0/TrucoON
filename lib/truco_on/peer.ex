@@ -3,6 +3,7 @@ defmodule TrucoOn.Peer do
   Um **peer** do grupo: supervisiona os processos que formam uma réplica.
 
       TrucoOn.Peer (supervisor, rest_for_one)
+      ├── Replica      base replicada de mesas (aplica comandos entregues)
       ├── Experiment   experimento do MPComm (mensagens numeradas + log)
       ├── Multicast    socket UDP + canal confiável + ordenação
       ├── SocketServer controle por TCP
@@ -15,7 +16,7 @@ defmodule TrucoOn.Peer do
 
   use Supervisor
 
-  alias TrucoOn.Peer.{Experiment, Membership, Multicast}
+  alias TrucoOn.Peer.{Experiment, Membership, Multicast, Replica}
 
   def start_link(opts), do: Supervisor.start_link(__MODULE__, opts, name: via(opts[:inst], :sup))
 
@@ -34,6 +35,7 @@ defmodule TrucoOn.Peer do
 
     children =
       [
+        {Replica, opts},
         {Experiment, opts},
         {Multicast, opts}
       ] ++ ctrl ++ [{Membership, opts}]
@@ -44,6 +46,7 @@ defmodule TrucoOn.Peer do
   @doc "Encaminha uma entrega do multicast para o consumidor certo."
   def dispatch(inst, %{payload: payload} = delivery) do
     case payload do
+      {:cmd, _uid, _cmd} -> Replica.deliver(inst, delivery)
       {:bench, _run, _origin, _k} -> Experiment.deliver(inst, delivery)
       {:bench_stop, _run, _origin} -> Experiment.deliver(inst, delivery)
       _ -> :ok

@@ -1,0 +1,30 @@
+%% Os três jeitos de comunicação no TrucoON e em que nível do SO cada um acontece
+flowchart LR
+  subgraph P1["Processo do SO: peer 1"]
+    direction TB
+    CH(("RoomChannel")):::proc
+    REP(("Replica")):::proc
+    MC(("Multicast")):::proc
+    CH -->|"① mensagem Erlang<br/>cópia de memória,<br/>sem o kernel"| REP
+    REP --> MC
+  end
+
+  KERNEL["<b>Kernel</b><br/>pilha de rede<br/>buffers de socket<br/>epoll"]:::os
+
+  subgraph P2["Processo do SO: peer 2"]
+    direction TB
+    MC2(("Multicast")):::proc
+    REP2(("Replica")):::proc
+    MC2 --> REP2
+  end
+
+  subgraph PC["Processo do SO: nó de controle"]
+    VER(("Verifier /<br/>GroupManager")):::proc
+  end
+
+  MC -->|"② socket UDP<br/>(entre peers)"| KERNEL
+  KERNEL -->|"② socket UDP"| MC2
+  PC <-->|"③ RPC (:erpc) ou socket TCP<br/>(controle ↔ peers)"| KERNEL
+
+  classDef proc fill:#DCFCE7,stroke:#15803D,color:#111
+  classDef os fill:#DBEAFE,stroke:#1D4ED8,color:#111

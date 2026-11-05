@@ -1,0 +1,19 @@
+%% Multicast totalmente ordenado (Lamport): N mensagens + N² ACKs
+sequenceDiagram
+  participant P1 as P1 (clock 4)
+  participant P2 as P2 (clock 6)
+  participant P3 as P3 (clock 2)
+
+  Note over P1: envia m: clock = 5
+  P1->>P1: {:tm, 5, P1, m}
+  P1->>P2: {:tm, 5, P1, m}
+  P1->>P3: {:tm, 5, P1, m}
+  Note over P2: recebe: clock = max(6,5)+1 = 7<br/>fila: [(5,P1)] · ACK com clock 8
+  Note over P3: recebe: clock = max(2,5)+1 = 6<br/>fila: [(5,P1)] · ACK com clock 7
+  P2->>P1: {:ta, 8, P2, (5,P1)}
+  P2->>P3: {:ta, 8, P2, (5,P1)}
+  P3->>P1: {:ta, 7, P3, (5,P1)}
+  P3->>P2: {:ta, 7, P3, (5,P1)}
+  P1->>P2: {:ta, 7, P1, (5,P1)}
+  P1->>P3: {:ta, 7, P1, (5,P1)}
+  Note over P1,P3: (5,P1) está na cabeça da fila e tem ACK de P1, P2 e P3<br/>→ todos entregam m na mesma posição

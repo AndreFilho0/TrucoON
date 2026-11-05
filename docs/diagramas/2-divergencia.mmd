@@ -1,0 +1,18 @@
+%% Sem ordem total: dois pedidos simultâneos pela cadeira 0 → réplicas divergem
+sequenceDiagram
+  participant B as Bia (peer 1)
+  participant R1 as Réplica peer 1
+  participant R3 as Réplica peer 3
+  participant C as Caio (peer 3)
+
+  par ao mesmo tempo
+    B->>R1: {:seat, mesa, bia, 0}
+    B->>R3: {:seat, mesa, bia, 0}
+  and
+    C->>R3: {:seat, mesa, caio, 0}
+    C->>R1: {:seat, mesa, caio, 0}
+  end
+
+  Note over R1: aplica Bia, depois Caio<br/>cadeira 0 = Bia (time A)<br/>Caio → :seat_taken
+  Note over R3: aplica Caio, depois Bia<br/>cadeira 0 = Caio (time A)<br/>Bia → :seat_taken
+  Note over R1,R3: mesmos comandos, ordens diferentes → estados diferentes<br/>hash da mesa: 7e11… ≠ c603…

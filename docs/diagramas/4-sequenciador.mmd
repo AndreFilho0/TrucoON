@@ -1,0 +1,12 @@
+%% Sequenciador (primário): N + 1 mensagens por multicast
+sequenceDiagram
+  participant P2 as P2 (remetente)
+  participant S as P1 = sequenciador (menor id)
+  participant P3 as P3
+
+  P2->>S: {:req, id, m}
+  Note over S: atribui o próximo número global<br/>g = 42
+  S->>S: {:ord, 42, id, m}
+  S->>P2: {:ord, 42, id, m}
+  S->>P3: {:ord, 42, id, m}
+  Note over S,P3: todos entregam na ordem de g<br/>(um único remetente + canal FIFO ⇒ mesma ordem)

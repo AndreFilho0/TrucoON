@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "TrucoON",
+    "slug": "trucoon",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "scheme": "trucoon",
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "TrucoON",
+      "shortName": "TrucoON",
+      "themeColor": "#0B3D2E",
+      "backgroundColor": "#0B3D2E"
+    }
+  }
+}
