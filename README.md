@@ -18,7 +18,7 @@ Equipe **ZAP**:
 
 ## Apresentações
 
-- Checkpoint 1 (05/11): _adicionar link do slide (Canva, Google Slides, etc.)_
+- Checkpoint 1 (05/11): https://docs.google.com/presentation/d/1XnzTkuvcFeIFaiBl8MVHFOCgGdjfAJenacRyqSoGmwE/edit?slide=id.p1#slide=id.p1
 
 ## Resumo
 
