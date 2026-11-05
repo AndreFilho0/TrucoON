@@ -1,0 +1,24 @@
+%% Camadas do multicast dentro de um peer
+flowchart TB
+  APP["Aplicação<br/>Experiment (ordem de entrega)"]
+  ORD["Política de ordenação<br/>none · fifo"]
+  REL["Canal confiável FIFO (Reliable)<br/>seq por par · ACK cumulativo · retransmissão · fila de espera"]
+  UDP["Socket UDP (:gen_udp)<br/>+ injeção de falhas: perda e atraso"]
+  NET(("rede"))
+
+  APP -- "multicast(payload)" --> ORD
+  ORD -- "entregas na ordem da política" --> APP
+  ORD -- "mensagens de protocolo" --> REL
+  REL -- "entregues em ordem FIFO" --> ORD
+  REL -- "{:d, origem, seq, msg} · {:a, origem, cum}" --> UDP
+  UDP --> REL
+  UDP <--> NET
+
+  classDef app fill:#DBEAFE,stroke:#1D4ED8,color:#111
+  classDef ord fill:#EDE9FE,stroke:#6D28D9,color:#111
+  classDef rel fill:#DCFCE7,stroke:#15803D,color:#111
+  classDef udp fill:#FEF3C7,stroke:#B45309,color:#111
+  class APP app
+  class ORD ord
+  class REL rel
+  class UDP udp

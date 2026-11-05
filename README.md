@@ -1,277 +1,209 @@
-# TrucoON — truco online sobre multicast replicado
+# INF0336 — Seminário
 
-Trabalho final de **Sistemas Distribuídos (INF0344 — UFG, 2026/2)**, construído a
-partir do [MPComm](https://github.com/professorfabio/MPComm) do Prof. Fábio M. Costa,
-reescrito em **Elixir/Erlang** (com a autorização do professor).
+## TrucoON — truco online sobre multicast replicado
 
-O MPComm mostra que, sem coordenação, processos que trocam mensagens por
-multicast recebem essas mensagens em **ordens diferentes**. O TrucoON dá um
-significado a essas mensagens: cada peer guarda uma **réplica das mesas de truco**,
-e cada mensagem é uma **jogada**. Se as réplicas aplicam as jogadas em ordens
-diferentes, o estado diverge: duas réplicas podem dar a mesma cadeira a jogadores
-diferentes, ou uma aceitar um truco que a outra rejeitou.
+Trabalho de **Sistemas Operacionais** e **Sistemas Distribuídos (INF0344)** — UFG,
+2026/2. O projeto parte do [MPComm](https://github.com/professorfabio/MPComm) do Prof.
+Fábio M. Costa, reescrito em **Elixir/Erlang** (com a autorização do professor).
+Código deste checkpoint: tag `parte-1b`.
 
-| Parte | O que pede o enunciado | Onde está | Documento |
+## Equipe
+
+Equipe **ZAP**:
+
+- 202406913 — André de Oliveira Machado Filho
+- 202109882 — Alan Queiroz Dantas de Oliveira
+- 202400316 — Stephany Jorge Araújo Resque
+- 202103736 — Jamilly Vitorya da Silva Barbosa
+
+## Apresentações
+
+- Checkpoint 1 (05/11): _adicionar link do slide (Canva, Google Slides, etc.)_
+
+## Resumo
+
+O TrucoON é um truco mineiro online para partidas privadas, pensado para rodar em
+vários servidores (um por região), cada um com uma cópia das mesas. Cada jogada é uma
+mensagem trocada entre os servidores pela rede, e para todos mostrarem o mesmo jogo
+essas mensagens precisam chegar sem se perder e na ordem certa. Reescrevemos o MPComm
+em Elixir/Erlang, com um nó de controle que fala com os servidores por socket TCP ou
+por RPC e um multicast entre os servidores sobre UDP. Sobre o UDP, construímos um canal
+confiável e FIFO (número de sequência, ACK cumulativo, retransmissão e fila de espera),
+com injeção de perda e atraso para simular regiões diferentes. Esperávamos eliminar
+perdas e violações de ordem por remetente em relação ao canal UDP sem tratamento e
+comparar a latência de socket contra RPC. O canal confiável zerou perdas, duplicatas e
+violações de FIFO, e o RPC se mostrou cerca de 5× mais rápido que o socket por pedido.
+Conclui-se que o FIFO garante a ordem de cada remetente, mas não uma ordem igual para
+todos os servidores — problema que os próximos checkpoints resolvem.
+
+## Introdução
+
+### Motivação
+
+Jogos online com partidas privadas (1x1 ou 2x2) precisam que todos os participantes
+vejam exatamente o mesmo estado de jogo, mesmo quando estão em regiões diferentes. A
+forma de conseguir isso é **replicar** o jogo em vários servidores e fazer cada jogada
+ser uma **mensagem** trocada entre eles. Num sistema distribuído não há memória
+compartilhada: só existe troca de mensagens pela rede [1, 2]. A rede, porém, perde,
+duplica, atrasa e reordena mensagens — e cada um desses problemas, num jogo de cartas,
+aparece como uma mesa dessincronizada. O TrucoON é o pretexto concreto para estudar,
+do geral (processos e troca de mensagens) ao específico (canal confiável e ordenação),
+como processos conversam de forma correta.
+
+### Revisão bibliográfica
+
+- Processos, IPC, sockets e RPC: Tanenbaum & Bos [1] (lado SO) e Van Steen & Tanenbaum
+  [2] (lado SD, capítulo de comunicação).
+- Confiabilidade sobre canal não confiável e ordenação de mensagens: Van Steen &
+  Tanenbaum [2].
+- Modelo de processos isolados que só se comunicam por mensagens, base da escolha por
+  Elixir/Erlang: *The BEAM Book* [3] e a tese de Armstrong [4].
+- Base de código reescrita: MPComm, do Prof. Fábio M. Costa [5].
+
+### Objetivos
+
+Construir a base de comunicação do grupo de servidores:
+
+- um **nó de controle** que registra os servidores e coordena experimentos, falando com
+  eles por **socket TCP** ou por **RPC**, para comparar os dois transportes;
+- um **multicast sobre UDP** entre os servidores, primeiro sem tratamento nenhum e
+  depois com um **canal confiável e FIFO**;
+- entender e aplicar, sobre esse código, os conceitos de processo, IPC, socket, RPC,
+  entrega confiável e ordem FIFO.
+
+## Metodologia
+
+### Conjunto de dados (experimentos)
+
+Não há dataset externo: os dados são gerados pelos próprios experimentos, rodados numa
+máquina só com injeção de falhas para simular regiões diferentes.
+
+- **Experimento de multicast** (`V.bench(30)`): 4 peers, 30 mensagens por peer, 10% de
+  perda (`LOSS=0.1`) e 0–60 ms de atraso por datagrama (`DELAY_MAX=60`), com e sem o
+  canal confiável.
+- **Experimento de transporte** (`V.transport_benchmark(300)`): 300 pedidos para cada
+  um de 3 peers, pelo mesmo caminho de código, variando só o transporte (socket ou RPC).
+
+### Modelos (stack e infraestrutura)
+
+- **Elixir 1.17 / Erlang-OTP 27** sobre a BEAM: cada peer é um processo do SO
+  (`beam.smp`) e, dentro dele, processos leves que só se comunicam por `send`/`receive`
+  (`lib/truco_on/peer.ex`).
+- **Controle:** `:gen_tcp` com enquadramento `packet: 4` e serialização segura
+  (`binary_to_term(_, [:safe])`) no socket (`lib/truco_on/control/socket_server.ex`);
+  `:erpc.call` no RPC. Os dois chegam na mesma função `handle/2`
+  (`lib/truco_on/control/client.ex`).
+- **Multicast:** `:gen_udp` com envio por peer e recepção `active: true`
+  (`lib/truco_on/peer/multicast.ex`), com injeção de `LOSS`/`DELAY`.
+- **Canal confiável e FIFO:** estrutura pura, sem rede, testada isolada
+  (`lib/truco_on/multicast/reliable.ex`): `seq` crescente, retransmissão após 150 ms,
+  descarte de duplicatas, fila de espera e ACK cumulativo.
+- **Infraestrutura:** sem banco e sem Docker (estado em memória, replicado). Phoenix e
+  Bandit vêm pelo `mix`, versões fixadas em `mix.lock`.
+
+Reproduzir:
+
+```bash
+CONTROL=socket ORDERING=none LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
+scripts/run.sh 'V.bench(30)'                  # perdas e violações de FIFO
+scripts/down.sh
+
+CONTROL=rpc ORDERING=fifo LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
+scripts/run.sh 'V.bench(30)'                  # 0 perdas, 0 violações
+scripts/run.sh 'V.transport_benchmark(300)'   # socket × RPC
+scripts/down.sh
+```
+
+Testes: `mix test` — `test/truco_on/multicast/protocols_test.exs` (rede simulada com
+30% de perda) e `test/truco_on/integration/group_test.exs` (blocos "Parte 1a" e
+"Parte 1b").
+
+### Métricas
+
+- Multicast: mensagens **perdidas**, **duplicadas**, **violações de FIFO** e **posições
+  fora de ordem**; custo em **datagramas UDP por multicast**.
+- Transporte: latência por pedido (**média**, **mediana**, **p99**).
+
+### Fluxograma
+
+Fases do projeto e visão geral da arquitetura (nó de controle + grupo de peers):
+
+| Parte | Enunciado | Estado |
+|---|---|---|
+| 1a | Trocar sockets por RPC no cliente-servidor e comparar | ✅ |
+| 1b | Perda de mensagens + ordem FIFO no multicast, com sockets | ✅ |
+| 2 | Aplicação em que a ordem é crítica (truco replicado) | próximas entregas |
+| 3 | Coordenação por ordem total (Lamport, cap. 5) | próximas entregas |
+| 4 | Coordenação mais leve (sequenciador, cap. 7) | próximas entregas |
+
+![Visão geral: nó de controle e grupo de peers](docs/checkpoint-1/diagramas/visao-geral.png)
+
+## Resultados
+
+### Tabelas
+
+Multicast — 4 peers, 30 mensagens cada, 10% de perda, 0–60 ms de atraso (`V.bench(30)`):
+
+| `ORDERING` | Perdidas | Duplicadas | Violações FIFO | Posições fora de ordem |
+|---|---|---|---|---|
+| `none` (sem tratamento) | 50 | 0 | 28 | 110 de 110 |
+| `fifo` (canal confiável) | **0** | **0** | **0** | 116 de 120 |
+
+Custo do canal confiável: ~9,3 datagramas UDP por multicast (dados, ACKs e
+retransmissões), contra 4 no modo sem tratamento.
+
+Transporte — 300 pedidos para cada um de 3 peers (`V.transport_benchmark(300)`):
+
+| Transporte | Média | Mediana | p99 |
 |---|---|---|---|
-| 1a | Trocar sockets por RPC no cliente-servidor e comparar | `lib/truco_on/control/` | [docs/parte-1a-rpc.md](docs/parte-1a-rpc.md) |
-| 1b | Perda de mensagens + ordem FIFO no multicast, com sockets | `lib/truco_on/multicast/reliable.ex`, `peer/multicast.ex` | [docs/parte-1b-perda-fifo.md](docs/parte-1b-perda-fifo.md) |
-| 2 | Aplicação em que a ordem é crítica + melhorias no código-base | `lib/truco_on/truco/`, `peer/replica.ex`, `app/` | [docs/parte-2-aplicacao.md](docs/parte-2-aplicacao.md) |
-| 3 | Coordenação por ordem total (cap. 5) | `multicast/ordering/lamport.ex` | [docs/parte-3-ordem-total.md](docs/parte-3-ordem-total.md) |
-| 4 | Coordenação mais leve (cap. 7) | `multicast/ordering/sequencer.ex` | [docs/parte-4-sequenciador.md](docs/parte-4-sequenciador.md) |
+| Socket TCP (uma conexão por pedido) | 143 µs | 133 µs | 203 µs |
+| RPC (`:erpc`) | 28 µs | 27 µs | 56 µs |
 
-## Resultado em uma tabela
+### Multimídia (diagramas)
 
-4 peers, 10% de perda e 0–60 ms de atraso por datagrama, 30 mensagens por peer
-(`scripts/measure.sh 4 30` com `LOSS=0.1 DELAY_MAX=60`):
+![O mesmo pedido por socket TCP e por RPC](docs/diagramas/1a-socket-vs-rpc.png)
 
-| `ORDERING` | Mensagens perdidas | Violações FIFO | Posições fora de ordem | Mesas divergentes (disputa de cadeiras) | Msgs de protocolo / multicast |
-|---|---|---|---|---|---|
-| `none` (MPComm original) | 50 | 28 | 110 de 110 | 8 de 8 | 4 |
-| `fifo` (Parte 1b) | 0 | 0 | 116 de 120 | 8 de 8 | 4 |
-| `total` (Parte 3, Lamport) | 0 | 0 | **0** de 120 | **0** de 8 | 20 (= N + N²) |
-| `sequencer` (Parte 4) | 0 | 0 | **0** de 120 | **0** de 8 | 4,75 (≤ N + 1) |
+![Perda, fila de espera, retransmissão e ACK cumulativo](docs/diagramas/1b-perda-retransmissao.png)
 
-## Arquitetura
+![Camadas do multicast dentro de um peer](docs/checkpoint-1/diagramas/camadas-peer.png)
 
-![Arquitetura do TrucoON](docs/diagramas/2-arquitetura.png)
+## Discussão
 
-Todos os diagramas (fonte Mermaid, SVG e PNG para slides) estão em
-[docs/arquitetura.md](docs/arquitetura.md).
+- **Socket × RPC** [2, cap. 4]: o RPC esconde a rede atrás de uma chamada de função e
+  ganha em latência (~5×) porque o Erlang mantém a conexão TCP aberta entre nós,
+  enquanto o socket faz o handshake de 3 vias a cada pedido. Em troca, o RPC acopla as
+  duas pontas à plataforma (nós Erlang com o mesmo *cookie*, portas do epmd) e expõe
+  qualquer função ao remoto; o socket é independente de linguagem e expõe só o que
+  `handle/2` aceita. Na prática, o navegador do jogador não fala RPC do Erlang — por
+  isso o acoplamento de plataforma é uma restrição real.
+- **Entrega confiável e FIFO** [2, cap. 8]: número de sequência, ACK cumulativo,
+  retransmissão e fila de espera eliminam perdas, duplicatas e violações de ordem por
+  remetente, ao custo de mais datagramas por mensagem — o preço esperado da
+  confiabilidade sobre um canal não confiável.
+- **Limite do FIFO:** o FIFO ordena as mensagens *de cada remetente*, mas não impõe uma
+  ordem igual para todos os servidores: mensagens de remetentes diferentes ainda chegam
+  em ordens diferentes (116 de 120 posições fora de ordem mesmo com FIFO). Garantir uma
+  ordem única para todos é o problema de ordem total, abordado nos próximos checkpoints.
 
-```
-   navegador (Expo Web, mobile-first)          navegador
-        │ REST + WebSocket                          │
-        ▼                                           ▼
- ┌─────────────── peer 1 ───────────────┐   ┌──── peer 2 ────┐   ┌── peer 3 ──┐
- │ Phoenix (REST sem estado + Channels) │   │      ...       │   │    ...     │
- │ Replica  ── base de mesas + ETS      │   │                │   │            │
- │ Ordenação  none│fifo│total│sequencer │   │                │   │            │
- │ Canal confiável FIFO (seq/ACK/retx)  │   │                │   │            │
- │ UDP (:gen_udp) + injeção de falhas   │◄─►│   UDP          │◄─►│   UDP      │
- └──────────────┬───────────────────────┘   └───────┬────────┘   └─────┬──────┘
-                │ socket TCP  ou  RPC (:erpc)        │                  │
-                ▼                                    ▼                  ▼
-          ┌────────────── nó de controle ──────────────┐
-          │ GroupManager — registro e descoberta       │
-          │ Verifier — dispara experimentos e compara  │
-          └────────────────────────────────────────────┘
-```
+## Conclusão
 
-- **Peers** (`ROLE=peer`) trocam mensagens entre si **só por UDP**. Cada um tem uma
-  réplica completa de todas as mesas e um servidor web para os jogadores ligados a ele.
-- **Nó de controle** (`ROLE=control`) faz o papel dos servidores do MPComm
-  (`GroupMngr.py` e `comparisonServer.py`). Fala com os peers por socket TCP ou por
-  RPC, conforme `CONTROL`.
-- **Frontend** (`app/`): Expo + React Native Web + NativeWind + Zustand, a base do
-  `melivra_mobile`. Cria a mesa, gera o link e o QR code de convite, mostra o lobby,
-  a mesa de jogo e um painel com o hash da mesa em cada réplica.
+Os objetivos do checkpoint foram alcançados: socket e RPC resolvem a mesma comunicação
+cliente-servidor, com o RPC entregando menos código e melhor tratamento de erros e o
+socket entregando independência de plataforma e controle sobre o que é exposto; e o
+canal confiável zerou perdas, duplicatas e violações de FIFO, pagando com mais
+datagramas por mensagem. Ficou também evidente o limite do FIFO: ele garante a ordem de
+cada remetente, mas não uma ordem igual para todos os servidores — ponto de partida das
+Partes 3 e 4 (ordem total e coordenação mais leve).
 
-## Instalação
+## Referências
 
-### O que é preciso
-
-| Ferramenta | Versão testada | Para quê |
-|---|---|---|
-| **Erlang/OTP** | 27.1.1 | runtime dos nós: processos, sockets UDP/TCP e distribuição (`:erpc`) |
-| **Elixir** | 1.17.1 (compilado para OTP 27) | backend: protocolos, réplicas, Phoenix |
-| **Node.js + npm** | 22.5.1 | só para gerar o frontend (`scripts/build_web.sh`) |
-
-Não é preciso banco de dados nem Docker: o estado fica em memória, replicado entre os
-peers. As dependências de cada linguagem (Phoenix 1.7.24 e Bandit no backend; Expo 54,
-React Native Web, NativeWind e Zustand no frontend) são baixadas pelo `mix` e pelo
-`npm`, com as versões fixadas em `mix.lock` e `app/package-lock.json`.
-
-Desenvolvido e testado em **macOS 26 (Apple Silicon)** com **asdf 0.19**. Os scripts
-são em bash, então em Linux funcionam igual; no Windows, use o WSL.
-
-### Instalando com asdf (recomendado)
-
-O [asdf](https://asdf-vm.com) instala exatamente as versões do arquivo
-`.tool-versions` da raiz do projeto:
-
-```
-elixir 1.17.1-otp-27
-erlang 27.1.1
-nodejs 22.5.1
-```
-
-**1. Instale o asdf**
-
-```bash
-# macOS
-brew install asdf
-
-# Linux: baixe o binário em https://github.com/asdf-vm/asdf/releases
-# e coloque-o no PATH (ex.: ~/.local/bin/asdf)
-```
-
-Adicione os *shims* do asdf ao PATH, no `~/.zshrc` ou `~/.bashrc`, e abra um terminal novo:
-
-```bash
-export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
-```
-
-**2. Instale as dependências para compilar o Erlang**
-
-O asdf compila o Erlang a partir do código-fonte (leva de 5 a 15 minutos).
-
-```bash
-# macOS
-brew install autoconf openssl@3
-export KERL_CONFIGURE_OPTIONS="--without-javac --without-wx --without-odbc --with-ssl=$(brew --prefix openssl@3)"
-
-# Ubuntu / Debian
-sudo apt install build-essential autoconf m4 libncurses-dev libssl-dev
-export KERL_CONFIGURE_OPTIONS="--without-javac --without-wx --without-odbc"
-```
-
-(`--without-wx` pula a interface gráfica do Erlang, que o projeto não usa.)
-
-**3. Instale Erlang, Elixir e Node**
-
-Na pasta do projeto:
-
-```bash
-asdf plugin add erlang
-asdf plugin add elixir
-asdf plugin add nodejs
-asdf install            # lê o .tool-versions; o Erlang vem antes do Elixir
-```
-
-**4. Confira**
-
-```bash
-erl -noshell -eval 'io:format("~s~n", [erlang:system_info(otp_release)]), halt().'   # 27
-elixir --version        # Elixir 1.17.1 (compiled with Erlang/OTP 27)
-node --version          # v22.5.1
-```
-
-Agora siga para [Preparando o projeto](#preparando-o-projeto-primeira-vez).
-
-### Sem asdf
-
-Também funciona com `brew install elixir node` (macOS) ou `sudo apt install elixir
-erlang nodejs npm` (Linux), mas essas versões costumam ser diferentes das testadas.
-O projeto aceita Elixir 1.14 ou mais novo (`mix.exs`); se algo falhar, use o asdf com
-as versões acima.
-
-### Preparando o projeto (primeira vez)
-
-Vale para qualquer forma de instalação (com ou sem asdf). Depois de clonar o
-repositório, na pasta do projeto:
-
-```bash
-# 1. Backend: ferramentas do Elixir e dependências (Phoenix, Bandit, ...)
-mix local.hex --force
-mix local.rebar --force
-mix deps.get
-
-# 2. Frontend: dependências do app/ (npm) e export para priv/static
-cd app && npm install && cd ..
-scripts/build_web.sh
-```
-
-> **Não pule estes passos.** As pastas `deps/`, `app/node_modules/` e `priv/static/`
-> não vão para o git, então um clone novo não tem nenhuma delas:
->
-> - sem o `mix deps.get`, o `scripts/up.sh` falha ao compilar;
-> - sem o `scripts/build_web.sh`, os peers sobem, mas `http://localhost:4001` mostra só
->   *"TrucoON peer no ar. Frontend não exportado (rode scripts/build_web.sh)."*
-
-Repita o `mix deps.get` quando o `mix.lock` mudar, o `npm install` quando o
-`app/package-lock.json` mudar, e o `scripts/build_web.sh` sempre que mudar algo em `app/`.
-
-## Como rodar
-
-Com tudo instalado e o projeto preparado (seção anterior):
-
-```bash
-ORDERING=total scripts/up.sh 3        # controle + 3 peers em segundo plano
-# abra http://localhost:4001, :4002 ou :4003 (um servidor de jogo em cada)
-
-scripts/console.sh                    # IEx no nó de controle
-scripts/down.sh                       # para tudo
-```
-
-Os peers levam uns 10 segundos para se registrar e formar o grupo; na tela inicial a
-bolinha fica verde quando o grupo está pronto. Se algo não subir, veja os logs em
-`tmp/run/*.log`.
-
-### Jogando pelo celular (mesma rede Wi-Fi)
-
-```bash
-ipconfig getifaddr en0                               # IP do computador (Linux: hostname -I)
-PEER_HOST=192.168.0.10 ORDERING=total scripts/up.sh 3
-```
-
-Abra `http://192.168.0.10:4001` no computador **pelo IP**, não por `localhost`, para
-que o link e o QR code do convite funcionem no celular. Use o mesmo `PEER_HOST` no
-`scripts/run.sh` e no `scripts/console.sh`. No macOS, permita conexões de entrada para
-o `beam.smp` se o firewall perguntar.
-
-Variáveis do `scripts/up.sh`:
-
-| Variável | Valores | Efeito |
-|---|---|---|
-| `ORDERING` | `none`, `fifo`, `total`, `sequencer` | política de ordenação do multicast |
-| `CONTROL` | `rpc`, `socket` | transporte das interações cliente-servidor |
-| `LOSS` | `0.0`–`1.0` | probabilidade de descartar cada datagrama UDP |
-| `DELAY_MIN`, `DELAY_MAX` | ms | atraso aleatório por datagrama (gera reordenação) |
-| `REMOTE_DELAY` | ms | só o último peer fica "em outra região" com esse atraso |
-
-No console do nó de controle (`scripts/console.sh`), ou de fora com `scripts/run.sh '<expressão>'`:
-
-```elixir
-V.bench(50)                          # experimento do MPComm: compara a ordem de entrega
-V.replicas()                         # compara as réplicas das mesas de truco
-V.message_cost()                     # mensagens por multicast
-V.transport_benchmark(300)           # socket TCP × RPC (Parte 1a)
-V.faults(0.1, 0, 80)                 # muda perda/atraso em todos os peers em tempo real
-S.seat_race(rooms: 10)               # cenário: 4 jogadores disputando cadeiras
-S.games(rooms: 3, duration_ms: 20_000) # cenário: partidas inteiras com bots
-```
-
-Para rodar em várias máquinas (como o MPComm sugere: peers em regiões diferentes da
-nuvem), suba em cada VM com `PEER_HOST=<IP público>`, `CONTROL_HOST`/`CONTROL_NODE`
-apontando para a VM de controle e libere as portas UDP (6789+), TCP (5678–5680, 5690+)
-e, no modo RPC, a 4369 (epmd) e as portas da distribuição Erlang.
-
-### Frontend em modo desenvolvimento
-
-```bash
-cd app && npm install && npm run web   # Expo em http://localhost:8081, usa o peer :4001
-EXPO_PUBLIC_SERVER=http://192.168.0.10:4001 npm run web   # outro peer / celular na rede
-```
-
-## Testes
-
-```bash
-mix test        # 56 testes, ~35 s
-```
-
-- **Unitários**: regras do truco (portadas do melivra), sala/lobby, canal confiável
-  e políticas de ordenação. Os testes de protocolo usam uma rede simulada em memória
-  que perde, duplica e reordena mensagens.
-- **Integração** (`test/truco_on/integration/`): GroupManager, Verifier e 3–4 peers
-  reais na mesma VM, trocando datagramas UDP com 15% de perda. Verificam cada parte:
-  controle por socket e por RPC, ausência de perda e violação FIFO, ordem idêntica com
-  Lamport e sequenciador, o custo exato de mensagens (20 por multicast com N = 4 no
-  Lamport), réplicas iguais com ordem total e **divergentes** sem ela.
-
-## Estrutura
-
-```
-lib/truco_on/
-  control/          client.ex (socket × RPC), socket_server.ex, group_manager.ex,
-                    verifier.ex, compare.ex, scenario.ex
-  multicast/        reliable.ex (Parte 1b), ordering.ex (none/fifo),
-                    ordering/lamport.ex (Parte 3), ordering/sequencer.ex (Parte 4)
-  peer/             multicast.ex (UDP + camadas), replica.ex, membership.ex,
-                    experiment.ex, control.ex, bot.ex
-  truco/            deck, evaluator, rules (portados do melivra), game.ex (pura),
-                    rooms.ex (base replicada), code.ex (código de convite)
-lib/truco_on_web/   REST, WebSocket (RoomChannel), CORS, identidade de convidado
-app/                frontend Expo (base do melivra_mobile)
-scripts/            up, down, console, run, measure, build_web
-test/               unitários + integração com peers reais
-```
+- [1] TANENBAUM, A. S.; BOS, H. **Sistemas Operacionais Modernos**. 4. ed. São Paulo:
+  Pearson, 2016.
+- [2] VAN STEEN, M.; TANENBAUM, A. S. **Distributed Systems**. 4. ed. [S.l.]:
+  distributed-systems.net, 2023.
+- [3] STENMAN, E. **The BEAM Book: Understanding the Erlang Runtime System**.
+  Disponível em: https://blog.stenmans.org/theBeamBook/. Acesso em: 5 nov. 2026.
+- [4] ARMSTRONG, J. **Making reliable distributed systems in the presence of software
+  errors**. 2003. Tese (Doutorado) — KTH Royal Institute of Technology, Estocolmo, 2003.
+- [5] COSTA, F. M. **MPComm**. GitHub, [s.d.]. Disponível em:
+  https://github.com/professorfabio/MPComm. Acesso em: 5 nov. 2026.
