@@ -99,9 +99,9 @@ export function HomeScreen({ initialCode, onEnter }: Props) {
                   placeholderTextColor="#ffffff55"
                   autoCapitalize="characters"
                   maxLength={9}
-                  className="flex-1 bg-felt-dark text-white rounded-2xl px-4 py-3.5 text-base tracking-widest"
+                  className="flex-1 min-w-0 bg-felt-dark text-white rounded-2xl px-4 py-3.5 text-base tracking-widest"
                 />
-                <Button title="Entrar" disabled={!hasName || code.length < 9} loading={busy === "join"} onPress={join} />
+                <Button title="Entrar" className="shrink-0" disabled={!hasName || code.length < 9} loading={busy === "join"} onPress={join} />
               </View>
             </>
           )}
