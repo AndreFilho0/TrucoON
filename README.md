@@ -2,7 +2,7 @@
 
 ## TrucoON — truco online sobre multicast replicado
 
-Trabalho de **Sistemas Operacionais** e **Sistemas Distribuídos (INF0344)** — UFG,
+Trabalho de **Sistemas Operacionais** (INF0344)** — UFG,
 2026/2. O projeto parte do [MPComm](https://github.com/professorfabio/MPComm) do Prof.
 Fábio M. Costa, reescrito em **Elixir/Erlang** (com a autorização do professor).
 Este README é o **relatório** do trabalho e é atualizado a cada checkpoint. Código do
