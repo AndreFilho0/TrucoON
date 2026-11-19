@@ -7,7 +7,7 @@ defmodule TrucoOn.Peer.Multicast do
 
       aplicação (Replica / Experiment)
             ▲ entregas            │ multicast(payload)
-      política de ordenação  (Basic | Lamport | Sequencer)   — Partes 3 e 4
+      política de ordenação  (Basic | Lamport)              — Parte 3
             ▲                     │
       canal confiável FIFO   (Reliable: seq, ACK, retransmissão) — Parte 1b
             ▲                     │      (desligado no modo :none)
@@ -171,9 +171,6 @@ defmodule TrucoOn.Peer.Multicast do
       ready: state.ready,
       udp_port: state.port,
       faults: state.faults,
-      sequencer:
-        state.mode == :sequencer && state.ord &&
-          TrucoOn.Multicast.Ordering.Sequencer.sequencer(state.ord),
       pending_acks: Reliable.pending(state.rel),
       held_back: Reliable.held_back(state.rel),
       ordering_queue: if(state.ord, do: state.ord_mod.pending(state.ord), else: 0)
@@ -417,7 +414,6 @@ defmodule TrucoOn.Peer.Multicast do
   defp packet_info({:r, _, inner}, inst), do: Map.put(Trace.inner(inst, inner), :layer, "r")
 
   defp order_label({:lamport, ts, origin}), do: "ts #{ts}.#{origin}"
-  defp order_label({:global_seq, g}), do: "g #{g}"
   defp order_label(_), do: nil
 
   defp wall, do: System.system_time(:millisecond)

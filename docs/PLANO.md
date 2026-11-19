@@ -1,8 +1,9 @@
 # TrucoON — Plano de entregas
 
-O enunciado do trabalho final pede 4 partes, entregues separadamente pelo GitHub,
-cada uma com **código + README + vídeo com os 3 integrantes**. O código está completo
-neste repositório; este plano descreve como fatiar as entregas.
+O trabalho foi entregue em 3 checkpoints (05/11, 19/11 e 26/11), com o README como
+relatório. O grupo decidiu fechar o projeto com a ordem total por **relógios de
+Lamport** (Parte 3); a variante com sequenciador foi retirada do código. Equipe ZAP,
+4 integrantes.
 
 ## Estado
 
@@ -12,7 +13,6 @@ neste repositório; este plano descreve como fatiar as entregas.
 | 1b — perda + FIFO | `multicast/reliable.ex`, `peer/multicast.ex` | `protocols_test.exs`, `group_test.exs` "Parte 1b" | `docs/parte-1b-perda-fifo.md` |
 | 2 — aplicação | `truco/`, `peer/replica.ex`, `truco_on_web/`, `app/` | `game_test`, `rooms_test`, `divergence_test` | `docs/parte-2-aplicacao.md` |
 | 3 — ordem total | `multicast/ordering/lamport.ex` | `protocols_test.exs`, `group_test.exs` | `docs/parte-3-ordem-total.md` |
-| 4 — sequenciador | `multicast/ordering/sequencer.ex` | `protocols_test.exs`, `group_test.exs` | `docs/parte-4-sequenciador.md` |
 
 ## Como entregar
 
@@ -29,7 +29,7 @@ O histórico tem **um commit por marco**, cada um com **tag**:
 | `parte-1b` | + canal confiável FIFO sobre UDP | **Parte 1** (a + b) |
 | `parte-2` | + truco replicado, web e frontend | **Parte 2** |
 | `parte-3` | + ordem total com Lamport | **Parte 3** |
-| `parte-4` | + sequenciador, medições e diagramas finais | **Parte 4** |
+| `main` | + painel da ordem total, medições, README final | **Checkpoint 3** (final) |
 
 Link de cada entrega: `https://github.com/AndreFilho0/TrucoON/tree/parte-2`
 (o professor vê o código e o README exatamente como estavam naquela parte). Uma
@@ -55,19 +55,19 @@ Pontos para confirmar com o professor:
   partida); disputa de cadeiras com `fifo` e o painel de réplicas vermelho.
 - **3**: o mesmo cenário com `total`: painel verde, `V.bench` com 0 fora de ordem,
   custo de 20 mensagens por multicast.
-- **4**: `sequencer`: mesma consistência com ~4,75 mensagens; `scripts/measure.sh`
-  com a tabela dos 4 modos; limitações (ponto único de falha).
+- **3 (final)**: `scripts/measure.sh` com a tabela de `none`, `fifo` e `total`;
+  painel com a faixa "Ordem total" verde; decisões do projeto.
 
-## Divisão sugerida no grupo (3 pessoas)
+## Divisão sugerida no grupo
 
-- **A** — rede e protocolos: canal confiável, Lamport, sequenciador, medições.
+- **A** — rede e protocolos: canal confiável, Lamport, medições.
 - **B** — controle e infraestrutura: socket × RPC, GroupManager, Verifier, scripts,
   implantação em VMs de regiões diferentes.
 - **C** — aplicação: regras do truco, réplica, web e frontend.
 
 ## Possíveis extensões (se sobrar tempo)
 
-- Eleição de um novo sequenciador quando o atual cai (algoritmo do valentão).
-- Um sequenciador por mesa, para tirar o gargalo.
+- Detectar a queda de um peer e tirá-lo do grupo (hoje o Lamport para de entregar
+  até ele voltar, porque espera o ACK de todos).
 - Implantação em duas regiões de nuvem, como no experimento original do MPComm.
 - Transferência de estado para um peer que reinicia (hoje a réplica volta vazia).

@@ -4,7 +4,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 N="${1:-4}"; MSGS="${2:-30}"
-for mode in none fifo total sequencer; do
+for mode in none fifo total; do
   ORDERING=$mode scripts/up.sh "$N" >/dev/null
   sleep 12
   echo "=== ORDERING=$mode ==="

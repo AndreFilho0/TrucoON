@@ -1,7 +1,7 @@
 %% Camadas do multicast dentro de um peer
 flowchart TB
   APP["Aplicação<br/>Experiment (MPComm) · Replica (truco)"]
-  ORD["Política de ordenação<br/>none · fifo · total (Lamport) · sequencer"]
+  ORD["Política de ordenação<br/>none · fifo · total (Lamport)"]
   REL["Canal confiável FIFO (Reliable)<br/>seq por par · ACK cumulativo · retransmissão · fila de espera"]
   UDP["Socket UDP (:gen_udp)<br/>+ injeção de falhas: perda e atraso"]
   NET(("rede"))

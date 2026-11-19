@@ -1,7 +1,9 @@
 # Gera os gráficos de resultados do README (SVG) a partir dos números medidos.
-#   python3 scripts/graficos.py docs/checkpoint-2/graficos
-import sys, os
-out = sys.argv[1]
+#   python3 scripts/graficos.py
+# Os SVGs vão para docs/checkpoint-2/graficos e docs/checkpoint-3/graficos; o PNG
+# (2×) sai de cada SVG com: rsvg-convert -z 2 -b white x.svg -o x.png
+import os
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs")
 SURF="#ffffff"; INK="#0b0b0b"; INK2="#52514e"; GRID="#e6e5e0"; C1="#2a78d6"; C2="#eb6834"
 
 def bar(x, y0, w, h):
@@ -13,7 +15,7 @@ def bar(x, y0, w, h):
     return (f'M{x},{y0} L{x},{y+r} Q{x},{y} {x+r},{y} L{x+w-r},{y} '
             f'Q{x+w},{y} {x+w},{y+r} L{x+w},{y0} Z')
 
-def chart(fname, title, subtitle, groups, series, ymax, ystep, unit, note):
+def chart(path, title, subtitle, groups, series, ymax, ystep, unit, note):
     W,H = 720, 414
     L,R,T,B = 64, 24, 116, 56
     pw, ph = W-L-R, H-T-B
@@ -54,18 +56,27 @@ def chart(fname, title, subtitle, groups, series, ymax, ystep, unit, note):
     s.append(f'<line x1="{L}" x2="{W-R}" y1="{y0}" y2="{y0}" stroke="{INK2}" stroke-width="1"/>')
     s.append(f'<text x="{L-40}" y="{H-12}" font-size="11.5" fill="{INK2}">{note}</text>')
     s.append('</svg>')
-    open(os.path.join(out,fname),"w").write("\n".join(s))
+    fname = os.path.join(ROOT, path)
+    os.makedirs(os.path.dirname(fname), exist_ok=True)
+    open(fname,"w").write("\n".join(s))
 
-chart("latencia-transporte.svg",
+chart("checkpoint-2/graficos/latencia-transporte.svg",
       "Latência por pedido: socket TCP × RPC",
       "300 pedidos para cada um de 3 peers, mesmo caminho de código",
       ["Média","Mediana","p99"],
       [("Socket TCP (conexão por pedido)",C1,[143,133,203]),("RPC (:erpc)",C2,[28,27,56])],
       250, 50, "µs", "Fonte: V.transport_benchmark(300). Menor é melhor.")
 
-chart("multicast-perdas-fifo.svg",
+chart("checkpoint-2/graficos/multicast-perdas-fifo.svg",
       "Multicast sem tratamento × canal confiável FIFO",
       "4 peers, 30 mensagens cada, 10% de perda e 0–60 ms de atraso",
       ["Perdidas","Duplicadas","Violações de FIFO"],
       [("ORDERING=none",C1,[50,0,28]),("ORDERING=fifo",C2,[0,0,0])],
       60, 10, "msgs", "Fonte: V.bench(30). Menor é melhor; o canal FIFO zera as três métricas.")
+
+chart("checkpoint-3/graficos/ordem-total.svg",
+      "Canal FIFO × ordem total com Lamport",
+      "4 peers, 10% de perda e 0–60 ms de atraso; disputa de cadeira em 8 mesas",
+      ["Posições fora de ordem","Mesas divergentes","Msgs por multicast"],
+      [("ORDERING=fifo",C1,[116,8,4]),("ORDERING=total (Lamport)",C2,[0,0,20])],
+      120, 20, "", "Fonte: V.bench(30) e S.seat_race(rooms: 8). O Lamport zera a divergência e paga com N + N² mensagens.")

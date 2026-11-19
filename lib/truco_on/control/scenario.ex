@@ -8,7 +8,7 @@ defmodule TrucoOn.Control.Scenario do
   Os jogadores de cada mesa são distribuídos entre peers diferentes (como
   amigos em regiões diferentes) e agem ao mesmo tempo. No fim, o Verifier
   compara as réplicas. Com `ORDERING=none` ou `fifo` as réplicas tendem a
-  divergir; com `total` ou `sequencer` devem ficar idênticas.
+  divergir; com `total` (Lamport) devem ficar idênticas.
   """
 
   alias TrucoOn.Control.{Client, Verifier}

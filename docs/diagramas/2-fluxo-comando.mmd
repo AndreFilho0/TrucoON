@@ -11,7 +11,7 @@ sequenceDiagram
   Ana->>CH: push "truco"
   CH->>R1: submit({:act, mesa, ana, :truco})
   R1->>MC: multicast({:cmd, uid, cmd})
-  Note over MC: protocolo de ordenação<br/>(none · fifo · total · sequencer)
+  Note over MC: protocolo de ordenação<br/>(none · fifo · total)
   MC-->>R1: entrega cmd (posição k)
   MC-->>R2: entrega cmd (posição k)
   MC-->>R3: entrega cmd (posição k)

@@ -6,7 +6,7 @@ defmodule TrucoOn.Multicast.ProtocolsTest do
   use ExUnit.Case, async: true
 
   alias TrucoOn.Multicast.Reliable
-  alias TrucoOn.Multicast.Ordering.{Basic, Lamport, Sequencer}
+  alias TrucoOn.Multicast.Ordering.{Basic, Lamport}
 
   describe "Reliable (Parte 1b)" do
     test "entrega tudo, sem duplicatas e em ordem FIFO, mesmo com perda e reordenação" do
@@ -36,15 +36,13 @@ defmodule TrucoOn.Multicast.ProtocolsTest do
   end
 
   describe "ordem total" do
-    for mod <- [Lamport, Sequencer] do
-      test "#{inspect(mod)}: todos os processos entregam a mesma sequência" do
-        :rand.seed(:exsss, {7, 8, 9})
+    test "Lamport: todos os processos entregam a mesma sequência" do
+      :rand.seed(:exsss, {7, 8, 9})
 
-        for _round <- 1..20 do
-          sequences = simulate(unquote(mod), [1, 2, 3, 4], 8)
-          assert sequences |> Map.values() |> Enum.uniq() |> length() == 1
-          assert length(sequences[1]) == 4 * 8
-        end
+      for _round <- 1..20 do
+        sequences = simulate(Lamport, [1, 2, 3, 4], 8)
+        assert sequences |> Map.values() |> Enum.uniq() |> length() == 1
+        assert length(sequences[1]) == 4 * 8
       end
     end
 
@@ -59,10 +57,8 @@ defmodule TrucoOn.Multicast.ProtocolsTest do
       assert divergent > 0
     end
 
-    test "custo em mensagens: Lamport N + N², sequenciador N + 1" do
-      ids = [1, 2, 3, 4]
-      assert count_messages(Lamport, ids) == 4 + 16
-      assert count_messages(Sequencer, ids) == 1 + 4
+    test "custo em mensagens: Lamport N + N²" do
+      assert count_messages(Lamport, [1, 2, 3, 4]) == 4 + 16
     end
   end
 
@@ -157,7 +153,7 @@ defmodule TrucoOn.Multicast.ProtocolsTest do
     end)
   end
 
-  # Mensagens geradas por UM multicast de um processo que não é o sequenciador.
+  # Mensagens geradas por UM multicast (do processo 2) até o grupo silenciar.
   defp count_messages(mod, ids) do
     states = Map.new(ids, &{&1, mod.init(&1, ids)})
     {st, sends} = mod.multicast(states[2], {2, 1}, :x)

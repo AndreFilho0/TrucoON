@@ -52,6 +52,5 @@ export type PeerInfo = {
   region: string | null;
   ordering: string;
   group_ready: boolean;
-  sequencer: number | false;
   peers: { id: number; region: string; url: string }[];
 };

@@ -51,7 +51,6 @@ defmodule TrucoOnWeb.PainelChannel do
       mode: mc.mode,
       ready: mc.ready,
       faults: mc.faults,
-      sequencer: mc.sequencer,
       controls: TrucoOnWeb.PainelController.controls?(),
       peers:
         Enum.map(view || [], fn m ->

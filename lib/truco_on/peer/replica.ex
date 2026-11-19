@@ -195,18 +195,19 @@ defmodule TrucoOn.Peer.Replica do
         waiters: expire(waiters)
     }
 
-    trace_apply(state, d, label, code, result, rooms, waiter != nil)
+    trace_apply(state, d, uid, label, code, result, rooms, waiter != nil)
     {:noreply, state}
   end
 
   # Painel: o que a réplica fez com o comando entregue.
-  defp trace_apply(state, d, label, code, result, rooms, mine) do
+  defp trace_apply(state, d, uid, label, code, result, rooms, mine) do
     if Trace.enabled?(state.inst) do
       room = Map.get(rooms, code)
 
       Trace.emit(state.inst, %{
         ev: "apply",
         id: Trace.msg_id(d.id),
+        uid: uid,
         origin: d.origin,
         label: label,
         code: code,

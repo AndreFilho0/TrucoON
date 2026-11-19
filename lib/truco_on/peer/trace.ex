@@ -36,8 +36,8 @@ defmodule TrucoOn.Peer.Trace do
 
   @doc """
   Descreve a mensagem interna (o que viaja dentro do canal confiável). O
-  `kind` diz a camada: `msg` (dado da aplicação), `tack` (ACK do Lamport),
-  `req`/`ord` (sequenciador). `inst` serve para consultar a mesa na réplica
+  `kind` diz a camada: `msg` (dado da aplicação) ou `tack` (ACK do Lamport).
+  `inst` serve para consultar a mesa na réplica
   local e dar nome às jogadas (truco, seis, nove...).
   """
   def inner(_inst, nil), do: %{kind: "rack"}
@@ -50,12 +50,6 @@ defmodule TrucoOn.Peer.Trace do
 
   def inner(_inst, {:ta, ts, acker, {kts, korigin}}),
     do: %{kind: "tack", ts: ts, acker: acker, ref: "#{kts}.#{korigin}"}
-
-  def inner(inst, {:req, id, payload}),
-    do: Map.merge(%{kind: "req", id: msg_id(id)}, payload(inst, payload))
-
-  def inner(inst, {:ord, g, id, payload}),
-    do: Map.merge(%{kind: "ord", id: msg_id(id), g: g}, payload(inst, payload))
 
   def inner(_inst, other) when is_tuple(other), do: %{kind: to_string(elem(other, 0))}
   def inner(_inst, _), do: %{kind: "?"}

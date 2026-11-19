@@ -88,11 +88,7 @@
     ],
     total: [
       "ORDEM TOTAL · Lamport",
-      "Relógios de Lamport: cada mensagem espera na fila ordenada por (relógio, id) até ter ACK de todos; só então vai para a aplicação.",
-    ],
-    sequencer: [
-      "ORDEM TOTAL · sequenciador",
-      "Sequenciador: o peer de menor id numera cada mensagem (g) e todos entregam em ordem crescente de g.",
+      "Relógios de Lamport: cada mensagem leva o carimbo (relógio L, id do peer) e espera na fila ordenada por esse carimbo até ter ACK de todos; só então vai para a aplicação, na mesma ordem em todas as réplicas.",
     ],
   };
 
@@ -158,6 +154,7 @@
       S.chain[id] = { applied: h.replica.applied, chain: h.replica.chain };
       S.applied[id] = h.replica.recent.map((r, i) => ({
         n: h.replica.applied - i,
+        uid: r.uid,
         label: r.label || r.cmd,
         ok: r.ok,
         reason: r.ok ? null : "",
@@ -168,6 +165,7 @@
     S.els[id].root.classList.remove("offline");
     renderPeer(id);
     renderConsistency();
+    renderOrderStrip();
     if (id === S.ids[0] && h.faults) syncSliders(h.faults);
   }
 
@@ -240,6 +238,7 @@
     const list = S.applied[id] || [];
     list.unshift({
       n: e.applied,
+      uid: e.uid,
       label: e.label,
       ok: e.ok,
       reason: e.reason,
@@ -251,6 +250,7 @@
     if (e.code && e.room) (S.rooms[id] ||= {})[e.code] = e.room;
     renderApplied(id);
     renderConsistency();
+    renderOrderStrip();
     if (S.race && e.code === S.race.code) renderRace();
   }
 
@@ -261,6 +261,7 @@
     setBadge("#mode", label, "gold");
     $("#mode-text").textContent = text;
     $("#controls").hidden = !S.controls;
+    $("#lamport").hidden = hello.mode !== "total";
 
     const peers = $("#peers");
     peers.style.setProperty("--n", S.ids.length);
@@ -286,6 +287,7 @@
         <section class="layer">
           <h3>③ Ordenação <em class="ord-meta"></em></h3>
           <div class="chips ordering"></div>
+          <div class="ord-why"></div>
           <div class="feed delivered" style="min-height:0"></div>
         </section>
         <section class="layer">
@@ -300,6 +302,7 @@
         chMeta: root.querySelector(".ch-meta"),
         ordering: root.querySelector(".ordering"),
         ordMeta: root.querySelector(".ord-meta"),
+        ordWhy: root.querySelector(".ord-why"),
         delivered: root.querySelector(".delivered"),
         applied: root.querySelector(".applied"),
         chain: root.querySelector(".chain"),
@@ -381,7 +384,6 @@
     const o = S.snap[id]?.ordering || {};
     let t = "";
     if (S.mode === "total" && o.clock != null) t = `relógio L = ${o.clock}`;
-    if (S.mode === "sequencer" && o.sequencer === id) t = `★ sequenciador · próximo g ${o.next_g}`;
     g.querySelector(".clock").textContent = t;
   }
 
@@ -425,13 +427,12 @@
 
     if (kind === "rack") el("circle", { r: 3.5, fill: color }, g);
     else if (kind === "tack") el("rect", { x: -5, y: -5, width: 10, height: 10, fill: color, transform: "rotate(45)", opacity: 0.85 }, g);
-    else if (kind === "req") el("rect", { x: -6, y: -6, width: 12, height: 12, rx: 2, fill: color }, g);
     else el("circle", { r: 7, fill: color }, g);
 
     if (e.retx) el("circle", { r: 11, fill: "none", stroke: "#fbbf24", "stroke-width": 2, "stroke-dasharray": "3 3" }, g);
 
-    if (kind === "msg" || kind === "req" || kind === "ord") {
-      const parts = [kind === "ord" ? `g${e.pkt.g}` : e.pkt.ts || e.pkt.id, e.pkt.label];
+    if (kind === "msg") {
+      const parts = [e.pkt.ts || e.pkt.id, e.pkt.label];
       el("text", { class: "pkt-label", x: 10, y: -9 }, g).textContent = parts.filter(Boolean).join(" · ").slice(0, 34);
     }
 
@@ -537,7 +538,7 @@
             ? `ACK do canal (até nº ${p.cum})`
             : p.kind === "tack"
               ? `ACK de P${p.acker} para ${p.ref}`
-              : `${p.seq != null ? "nº " + p.seq + " · " : ""}${fmt(p.label || p.kind)}${p.g ? " · g" + p.g : ""}`;
+              : `${p.seq != null ? "nº " + p.seq + " · " : ""}${fmt(p.label || p.kind)}${p.ts ? " · carimbo " + p.ts : ""}`;
         return `<div class="${fresh && i === 0 ? "enter" : ""}"><span class="tag ${e.status}">${STATUS[e.status] || e.status}</span>
           <span style="color:${pktColor(p)}">●</span> de P${e.from}: ${what}</div>`;
       })
@@ -593,13 +594,12 @@
         })),
       );
       if (!o.queue.length) emptyOrdering(els, "vazia: tudo já foi entregue");
-    } else if (S.mode === "sequencer") {
-      els.ordMeta.textContent = `espera g = ${o.expected}`;
-      renderChips(
-        els.ordering,
-        o.queue.map((m) => ({ key: "g" + m.g, color: pktColor(m), html: `<span class="k">g${m.g}</span> ${fmt(m.label)}` })),
-      );
-      if (!o.queue.length) emptyOrdering(els, "vazia: entregue tudo até g = " + (o.expected - 1));
+      // por que a cabeça ainda não saiu: faltam ACKs de quem?
+      const head = o.queue[0];
+      const missing = head ? S.ids.filter((p) => !head.acks.includes(p)) : [];
+      els.ordWhy.innerHTML = head
+        ? `cabeça <b>${esc(head.ts)}</b> espera ACK de ${missing.map((p) => "P" + p).join(", ")}`
+        : "";
     } else {
       els.ordMeta.textContent = "";
       emptyOrdering(els, "sem fila: entrega assim que o canal entrega");
@@ -662,6 +662,48 @@
     );
   }
 
+  // Faixa "ordem total": a k-ésima jogada aplicada em cada réplica, lado a
+  // lado. Com ordem total, cada linha tem a MESMA jogada em todas as colunas.
+  function renderOrderStrip() {
+    const box = $("#order-strip");
+    if (!S.ids.length) return;
+    const byN = new Map();
+    for (const id of S.ids)
+      for (const a of S.applied[id] || []) {
+        if (!byN.has(a.n)) byN.set(a.n, {});
+        byN.get(a.n)[id] = a;
+      }
+    const rows = [...byN.keys()].sort((a, b) => b - a).slice(0, 6);
+    if (!rows.length) {
+      box.innerHTML = `<p class="empty">Nenhuma jogada aplicada ainda. Rode a disputa de cadeira para ver a ordem em cada réplica.</p>`;
+      return;
+    }
+    let same = 0,
+      diff = 0;
+    const body = rows
+      .map((n) => {
+        const cells = S.ids.map((id) => byN.get(n)[id]);
+        const done = cells.every(Boolean);
+        const ok = done && new Set(cells.map((c) => c.uid || c.label)).size === 1;
+        if (done) ok ? same++ : diff++;
+        const st = !done ? `<span class="st wait">…</span>` : ok ? `<span class="st ok">✓</span>` : `<span class="st bad">✗</span>`;
+        return `<tr class="${done ? (ok ? "ok" : "bad") : ""}"><th>#${n}</th>${cells
+          .map((c) => (c ? `<td style="--c:${c.color}">${fmt(c.label)}</td>` : `<td class="wait">…</td>`))
+          .join("")}<td>${st}</td></tr>`;
+      })
+      .join("");
+    box.innerHTML = `<table>
+      <thead><tr><th>jogada</th>${S.ids.map((id) => `<th>Réplica P${id}</th>`).join("")}<th></th></tr></thead>
+      <tbody>${body}</tbody></table>
+      <p class="sum ${diff ? "bad" : same ? "ok" : ""}">${
+        diff
+          ? `✗ ${diff} posição(ões) com jogadas diferentes: as réplicas aplicaram em ordens diferentes.`
+          : same
+            ? `✓ Mesma jogada na mesma posição em todas as réplicas: ordem total.`
+            : ""
+      }</p>`;
+  }
+
   function setBadge(sel, text, cls) {
     const b = $(sel);
     b.textContent = text;
@@ -706,6 +748,7 @@
     }
     S.race = null;
     $("#race-result").hidden = true;
+    renderOrderStrip();
   });
 
   // ---------------------------------------------------------------- disputa

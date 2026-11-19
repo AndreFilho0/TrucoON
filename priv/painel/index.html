@@ -37,7 +37,18 @@
   </div>
 </section>
 
+<section id="lamport" class="lamport" hidden>
+  <div class="step"><b>1</b><span><strong>Carimbo.</strong> Antes de enviar, o peer faz <code>L = L + 1</code> e a jogada sai com o carimbo <code>(L, id)</code>.</span></div>
+  <div class="step"><b>2</b><span><strong>Relógio lógico.</strong> Ao receber um carimbo <code>t</code>: <code>L = max(L, t) + 1</code>. A jogada entra na fila ordenada por <code>(L, id)</code> e o peer manda ACK a todos.</span></div>
+  <div class="step"><b>3</b><span><strong>Entrega.</strong> Só a <em>cabeça</em> da fila sai, e só quando tem ACK de todos os peers. Assim todas as réplicas entregam na mesma ordem.</span></div>
+</section>
+
 <section id="race-result" class="race" hidden></section>
+
+<section class="order">
+  <h2>Ordem total · a mesma jogada na mesma posição em cada réplica?</h2>
+  <div id="order-strip"></div>
+</section>
 
 <main id="board">
   <svg id="net" aria-label="Mensagens trafegando entre os peers"></svg>
@@ -47,7 +58,6 @@
 <footer class="legend">
   <span><i class="dot msg"></i>mensagem (cor = mensagem)</span>
   <span><i class="dot tack"></i>ACK do Lamport</span>
-  <span><i class="dot req"></i>pedido ao sequenciador</span>
   <span><i class="dot rack"></i>ACK do canal FIFO</span>
   <span><i class="dot lost">✕</i>perdida na rede</span>
   <span><i class="dot retx"></i>retransmissão</span>

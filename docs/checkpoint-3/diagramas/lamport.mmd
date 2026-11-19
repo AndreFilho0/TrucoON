@@ -1,0 +1,18 @@
+%% Disputa de cadeira com ordem total (Lamport): carimbos iguais, desempate pelo id
+sequenceDiagram
+  participant P1 as P1 (L = 24)
+  participant P2 as P2 (L = 24)
+  participant P3 as P3 (L = 24)
+
+  Note over P1,P3: Ana (P1), Bia (P2) e Caio (P3) pedem a cadeira 0 ao mesmo tempo
+  P1->>P2: senta(Ana) · carimbo (25, P1)
+  P2->>P3: senta(Bia) · carimbo (25, P2)
+  P3->>P1: senta(Caio) · carimbo (25, P3)
+  Note over P1,P3: cada peer recebe: L = max(L, t) + 1 · põe na fila ordenada por (L, id) · manda ACK para todos
+  Note over P1: fila: (25,P1) (25,P2) (25,P3)
+  Note over P2: fila: (25,P1) (25,P2) (25,P3)
+  Note over P3: fila: (25,P1) (25,P2) (25,P3)
+  P2-->>P1: ACK (25,P1)
+  P3-->>P1: ACK (25,P1)
+  Note over P1,P3: a cabeça (25,P1) tem ACK de todos → todos entregam primeiro senta(Ana)
+  Note over P1,P3: cadeira 0 = Ana nas três réplicas · Bia e Caio recebem "cadeira ocupada"

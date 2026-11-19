@@ -23,8 +23,6 @@ Para gerar de novo depois de editar um `.mmd`: `scripts/render_diagrams.sh`.
 | Divergência na disputa de cadeira | `2-divergencia` | Parte 2: por que a ordem é crítica |
 | Árvore de supervisão | `2-supervisao` | processos com e sem estado, tolerância a falhas do OTP |
 | Lamport | `3-lamport` | Parte 3 |
-| Sequenciador | `4-sequenciador` | Parte 4 |
-| Custo × tamanho do grupo | `4-custo` | comparação final 3 × 4 |
 
 ## Visão geral
 ![](diagramas/1a-visao-geral.png)
@@ -53,12 +51,6 @@ Para gerar de novo depois de editar um `.mmd`: `scripts/render_diagrams.sh`.
 ## Lamport (Parte 3)
 ![](diagramas/3-lamport.png)
 
-## Sequenciador (Parte 4)
-![](diagramas/4-sequenciador.png)
-
-## Custo em mensagens
-![](diagramas/4-custo.png)
-
 ## Resultados medidos
 
 4 peers, 10% de perda, 0–60 ms de atraso, 30 mensagens por peer:
@@ -68,4 +60,3 @@ Para gerar de novo depois de editar um `.mmd`: `scripts/render_diagrams.sh`.
 | none | 50 | 110/110 | 8/8 | 4 |
 | fifo | 0 | 116/120 | 8/8 | 4 |
 | total (Lamport) | 0 | 0/120 | 0/8 | 20 |
-| sequencer | 0 | 0/120 | 0/8 | 4,75 |

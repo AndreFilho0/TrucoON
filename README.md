@@ -13,30 +13,30 @@
 
 - Checkpoint 1 (05/11): https://docs.google.com/presentation/d/1XnzTkuvcFeIFaiBl8MVHFOCgGdjfAJenacRyqSoGmwE/edit?slide=id.p1#slide=id.p1
 - Checkpoint 2 (19/11): https://docs.google.com/presentation/d/18mQT3qAogjV7CZVnszwLlKvBC1TlWlZRCGCNS4gDJNo/edit?usp=sharing
+- Checkpoint 3 (26/11): _link a adicionar_
 
 ## Resumo
 
 O TrucoON é um truco mineiro online para partidas privadas, pensado para rodar em
 vários servidores (um por região), cada um com uma cópia das mesas. Cada jogada é uma
 mensagem trocada entre os servidores pela rede, e para todos mostrarem o mesmo jogo
-essas mensagens precisam chegar sem se perder e na ordem certa. Reescrevemos o MPComm
-em Elixir/Erlang, com um nó de controle que fala com os servidores por socket TCP ou
-por RPC e um multicast entre os servidores sobre UDP, com injeção de perda e atraso
-para simular regiões diferentes. Sobre o UDP, construímos um canal confiável e FIFO
-(número de sequência, ACK cumulativo, retransmissão e fila de espera) e, no
-checkpoint 2, transformamos o jogo numa **máquina de estados replicada**: regras puras
-e determinísticas (a semente do embaralhamento viaja no comando), uma réplica por
-servidor que só aplica um comando depois que ele volta pelo multicast e um único
-escritor por servidor. Para mostrar isso ao vivo, construímos um **painel do
-multicast** que anima as mensagens indo de um servidor para o outro, paradas nas filas
-e chegando à réplica. Esperávamos eliminar perdas e violações de ordem por remetente
-em relação ao canal UDP sem tratamento e comparar a latência de socket contra RPC. O
-canal confiável zerou perdas, duplicatas e violações de FIFO, e o RPC se mostrou cerca
-de 5× mais rápido que o socket por pedido. Com jogadas simultâneas em servidores
-diferentes, porém, o FIFO não basta: na disputa de cadeira, **8 de 8 mesas
-divergiram**, tanto sem tratamento quanto com FIFO. Conclui-se que o FIFO garante a
-ordem de cada remetente, mas não uma ordem igual para todos os servidores, e a ordem
-total (Lamport e sequenciador) é o tema do próximo checkpoint.
+essas mensagens precisam chegar sem se perder e **na mesma ordem em todos eles**.
+Reescrevemos o MPComm em Elixir/Erlang, com um nó de controle que fala com os servidores
+por socket TCP ou por RPC e um multicast entre os servidores sobre UDP, com injeção de
+perda e atraso para simular regiões diferentes. Sobre o UDP, construímos um canal
+confiável e FIFO (número de sequência, ACK cumulativo, retransmissão e fila de espera);
+no checkpoint 2, transformamos o jogo numa **máquina de estados replicada** (regras
+determinísticas, uma réplica por servidor e um único escritor), com um **painel ao vivo**
+que mostra cada mensagem indo de um servidor para o outro; e, no checkpoint 3, colocamos
+por cima do canal FIFO um **multicast totalmente ordenado com relógios de Lamport**.
+Esperávamos eliminar perdas, violações de FIFO e, por fim, a divergência entre as
+réplicas quando jogadores agem ao mesmo tempo em servidores diferentes. O canal confiável
+zerou perdas, duplicatas e violações de FIFO, e o RPC foi cerca de 5× mais rápido que o
+socket por pedido, mas com FIFO **8 de 8 mesas divergiram** na disputa de cadeira; com o
+Lamport, **0 de 8** divergiram e 0 de 120 posições ficaram fora de ordem, ao custo de
+N + N² mensagens por jogada (20 com 4 servidores). Conclui-se que o FIFO ordena cada
+remetente, mas só um relógio lógico com confirmação de todos dá a mesma ordem a todas as
+réplicas — e, com ela, o mesmo jogo em todos os servidores.
 
 ## Introdução
 
@@ -75,6 +75,16 @@ sequência, confirmações e retransmissão) e distinguem as garantias de ordem 
 e total, além da ideia de que réplicas determinísticas que aplicam os mesmos comandos
 na mesma ordem terminam no mesmo estado.
 
+Para a ordem total, a referência é Lamport [6]. Como cada máquina tem o seu relógio
+físico e eles se desviam, o horário não serve para ordenar eventos de máquinas
+diferentes. Lamport define a relação "aconteceu antes" (→) e um **relógio lógico**: um
+contador que cada processo incrementa antes de enviar uma mensagem e que, ao receber
+uma mensagem com carimbo `t`, avança para `max(L, t) + 1`. Assim, se A → B, então
+L(A) < L(B); desempatando pelo id do processo, o par `(L, id)` dá uma ordem total igual
+para todos. Van Steen e Tanenbaum [2, cap. 5] usam esse relógio no **multicast
+totalmente ordenado**: cada mensagem espera numa fila ordenada pelo carimbo até ser
+confirmada por todos os processos, e só então é entregue.
+
 A escolha por Elixir/Erlang se apoia em dois trabalhos sobre a máquina virtual BEAM.
 *The BEAM Book* [3] descreve como ela implementa processos leves, cada um com a sua
 própria memória e a sua caixa de mensagens, escalonados pela própria máquina virtual,
@@ -105,6 +115,17 @@ No checkpoint 2, sobre essa base:
 - **medir** se as réplicas divergem com jogadas concorrentes sem ordem total;
 - **mostrar** o caminho de cada mensagem ao vivo, num painel, para a apresentação.
 
+No checkpoint 3 (entrega final):
+
+- implementar o **multicast totalmente ordenado com relógios de Lamport** sobre o canal
+  confiável e FIFO, sem coordenador central;
+- zerar a **divergência entre réplicas** com jogadas concorrentes e medir o **custo** em
+  mensagens;
+- mostrar no painel a **garantia de ordem total**: o relógio de cada servidor, a fila
+  ordenada por `(L, id)` com os ACKs e a mesma jogada na mesma posição em cada réplica;
+- fechar as **decisões do projeto** (transporte, multicast, filas e comunicação com o
+  nó de controle).
+
 ## Metodologia
 
 ### Conjunto de dados (experimentos)
@@ -119,10 +140,12 @@ máquina só com injeção de falhas para simular regiões diferentes.
   um de 3 peers, pelo mesmo caminho de código, variando só o transporte (socket ou RPC).
 - **Disputa de cadeira** (`S.seat_race(rooms: 8)`, checkpoint 2): 8 mesas 2x2 com os
   jogadores espalhados por 4 peers, todos pedindo as mesmas cadeiras ao mesmo tempo. No
-  fim, o Verifier compara o hash de cada mesa entre as réplicas.
+  fim, o Verifier compara o hash de cada mesa entre as réplicas. No checkpoint 3, o
+  mesmo experimento é repetido com `ORDERING=total` (Lamport).
 
 Código de cada entrega: checkpoint 1 na tag `parte-1b`; checkpoint 2 na tag `parte-2`
-(aplicação replicada) e na branch `checkpoint-2` (painel ao vivo do multicast). Detalhes
+(aplicação replicada) e na branch `checkpoint-2` (painel ao vivo do multicast);
+checkpoint 3 (versão final) na branch `main`. Detalhes
 de teoria e prática de cada entrega em
 [`docs/checkpoint-1/relatorio.md`](docs/checkpoint-1/relatorio.md) e
 [`docs/checkpoint-2/relatorio.md`](docs/checkpoint-2/relatorio.md).
@@ -151,9 +174,23 @@ scripts/run.sh 'S.seat_race(rooms: 8)'        # mesas divergentes sem ordem tota
 scripts/down.sh
 ```
 
-Testes: `mix test` — `test/truco_on/multicast/protocols_test.exs` (rede simulada com
-30% de perda), `test/truco_on/integration/group_test.exs` (blocos "Parte 1a" e
-"Parte 1b"), `test/truco_on/truco/` (regras, jogo e mesas) e
+Checkpoint 3 (ordem total com Lamport, o padrão do projeto):
+
+```bash
+ORDERING=total LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
+scripts/run.sh 'V.bench(30)'                  # 0 fora de ordem, mesma sequência
+scripts/run.sh 'S.seat_race(rooms: 8)'        # 0 mesas divergentes
+scripts/run.sh 'V.message_cost()'             # 20 mensagens por multicast (N + N²)
+scripts/down.sh
+
+scripts/measure.sh 4 30                       # tabela com none, fifo e total
+```
+
+Testes: `mix test` (53 testes) — `test/truco_on/multicast/protocols_test.exs` (rede
+simulada com 30% de perda; Lamport entrega a mesma sequência em todos os processos e
+custa N + N²), `test/truco_on/integration/group_test.exs` (blocos "Parte 1a",
+"Parte 1b" e "Parte 3", este com réplicas idênticas na disputa de cadeira e em partidas
+com bots), `test/truco_on/truco/` (regras, jogo e mesas) e
 `test/truco_on/integration/divergence_test.exs` (réplicas divergem sem ordem total).
 
 ### Modelos (stack e infraestrutura)
@@ -171,6 +208,11 @@ Testes: `mix test` — `test/truco_on/multicast/protocols_test.exs` (rede simula
   (`lib/truco_on/multicast/reliable.ex`): `seq` crescente, retransmissão após 150 ms
   (ou mais, quando o atraso configurado exige, para não retransmitir antes do ACK voltar),
   descarte de duplicatas, fila de espera e ACK cumulativo.
+- **Ordem total (checkpoint 3):** `lib/truco_on/multicast/ordering/lamport.ex`, uma
+  estrutura pura como o canal confiável: relógio `clock` inteiro, fila ordenada por
+  `(L, id)` com `:gb_sets`, mensagens `{:tm, L, origem, m}` e ACKs `{:ta, L, quem, (L,
+  origem)}`. Fica **acima** do canal FIFO, que é premissa do algoritmo. Escolhida por
+  configuração: `ORDERING=none | fifo | total` (padrão `total`).
 - **Aplicação (checkpoint 2):** regras do truco como funções puras
   (`lib/truco_on/truco/`), a réplica de mesas (`lib/truco_on/peer/replica.ex`, um
   GenServer que é o único escritor, com o estado publicado numa ETS de leitura
@@ -188,7 +230,12 @@ réplica, com o hash encadeado. As jogadas aparecem com nome: "TRUCO!", "SEIS!",
 "NOVE!", "DOZE!", "aceita o seis", "corre do nove" e a carta jogada ("joga 4♣ (zap)").
 O controle "câmera lenta" aumenta o atraso da rede, "perda de pacotes" descarta
 datagramas e o botão "Disputa de cadeira" faz um jogador em cada peer pedir a cadeira
-0 ao mesmo tempo. Os controles só funcionam com `PAINEL_CONTROLE=1`, que o
+0 ao mesmo tempo. No checkpoint 3, com `ORDERING=total`, o painel ganhou: o **relógio
+L** embaixo de cada servidor; as **três regras do Lamport** no topo (carimbo, relógio
+lógico, entrega); a fila da ordenação com o carimbo `(L, id)` de cada jogada, um ponto
+por ACK recebido e o aviso de quem ainda falta confirmar a cabeça da fila; e a faixa
+**"Ordem total"**, que põe lado a lado a k-ésima jogada aplicada em cada réplica — linha
+verde se é a mesma jogada em todas, vermelha se divergiram. Os controles só funcionam com `PAINEL_CONTROLE=1`, que o
 `scripts/up.sh` liga por padrão; num servidor público, o painel fica só de leitura.
 
 ### Métricas
@@ -198,20 +245,21 @@ datagramas e o botão "Disputa de cadeira" faz um jogador em cada peer pedir a c
 - Transporte: latência por pedido (**média**, **mediana**, **p99**).
 - Réplicas (checkpoint 2): **mesas divergentes** (hash da mesa diferente entre réplicas)
   e se a **sequência de comandos** aplicada é a mesma (hash encadeado).
+- Ordem total (checkpoint 3): **posições fora de ordem** entre os servidores, **mesas
+  divergentes** e o custo em **mensagens de protocolo por multicast** (dados + ACKs).
 
 ### Fluxograma
 
 Fases do projeto (cada parte é construída sobre a anterior):
 
-![Fases do projeto](docs/checkpoint-2/diagramas/fases.png)
+![Fases do projeto](docs/checkpoint-3/diagramas/fases.png)
 
 | Parte | Enunciado | Estado |
 |---|---|---|
 | 1a | Trocar sockets por RPC no cliente-servidor e comparar | ✅ |
 | 1b | Perda de mensagens + ordem FIFO no multicast, com sockets | ✅ |
 | 2 | Aplicação em que a ordem é crítica (truco replicado) + painel ao vivo | ✅ |
-| 3 | Coordenação por ordem total (Lamport, cap. 5) | próximas entregas |
-| 4 | Coordenação mais leve (sequenciador, cap. 7) | próximas entregas |
+| 3 | Coordenação por ordem total (Lamport, cap. 5) + garantia no painel | ✅ |
 
 Visão geral da arquitetura (nó de controle + grupo de peers):
 
@@ -223,6 +271,12 @@ como em todas as outras réplicas.
 
 ![Caminho de uma jogada](docs/checkpoint-2/diagramas/fluxo-comando.png)
 
+No checkpoint 3, o "multicast" desse caminho passa a ser o Lamport: a jogada só sai da
+fila quando é a menor `(L, id)` e todos os servidores confirmaram. Na disputa de cadeira,
+os três pedidos podem ter o mesmo relógio; o id do servidor desempata, igual em todos.
+
+![Disputa de cadeira com ordem total (Lamport)](docs/checkpoint-3/diagramas/lamport.png)
+
 ## Resultados
 
 ### Gráficos
@@ -231,8 +285,10 @@ como em todas as outras réplicas.
 
 ![Multicast sem tratamento × canal confiável FIFO](docs/checkpoint-2/graficos/multicast-perdas-fifo.png)
 
+![Canal FIFO × ordem total com Lamport](docs/checkpoint-3/graficos/ordem-total.png)
+
 Os gráficos são gerados a partir dos números das tabelas abaixo por
-`python3 scripts/graficos.py docs/checkpoint-2/graficos`.
+`python3 scripts/graficos.py`.
 
 ### Tabelas
 
@@ -242,9 +298,15 @@ Multicast — 4 peers, 30 mensagens cada, 10% de perda, 0–60 ms de atraso (`V.
 |---|---|---|---|---|
 | `none` (sem tratamento) | 50 | 0 | 28 | 110 de 110 |
 | `fifo` (canal confiável) | **0** | **0** | **0** | 116 de 120 |
+| `total` (Lamport, checkpoint 3) | **0** | **0** | **0** | **0 de 120** |
 
-Custo do canal confiável: ~9,3 datagramas UDP por multicast (dados, ACKs e
-retransmissões), contra 4 no modo sem tratamento.
+Custo por multicast (N = 4):
+
+| `ORDERING` | Mensagens de protocolo | Datagramas UDP (com ACKs do canal e retransmissões) |
+|---|---|---|
+| `none` | 4 | 4 |
+| `fifo` | 4 | ~9,3 |
+| `total` (Lamport) | **20** (4 dados + 16 ACKs) | ~62 |
 
 Transporte — 300 pedidos para cada um de 3 peers (`V.transport_benchmark(300)`):
 
@@ -259,6 +321,7 @@ Réplicas — disputa de cadeira, 8 mesas 2x2, 4 peers (`S.seat_race(rooms: 8)`)
 |---|---|
 | `none` (sem tratamento) | 8 de 8 |
 | `fifo` (canal confiável) | 8 de 8 |
+| `total` (Lamport, checkpoint 3) | **0 de 8** |
 
 ### Multimídia (painel e diagramas)
 
@@ -274,6 +337,25 @@ um por um servidor. Sem ordem total, a réplica do Peer 1 deu a cadeira para P1 
 outras duas para P3; os hashes encadeados ficaram com cores diferentes.
 
 ![Disputa de cadeira divergindo no modo FIFO](docs/checkpoint-2/painel-disputa-fifo.png)
+
+Checkpoint 3, a mesma disputa com `ORDERING=total` em câmera lenta. As três jogadas
+saíram com o mesmo relógio (105) e estão na fila de cada servidor na mesma ordem,
+`105.1`, `105.2`, `105.3`; cada ponto ao lado é um ACK recebido, e a cabeça `105.1`
+ainda espera a confirmação de P1, P2 e P3. Embaixo de cada servidor, o relógio L.
+
+![Fila do Lamport durante a disputa de cadeira](docs/checkpoint-3/painel-lamport-fila.png)
+
+Disputa encerrada com Lamport: a faixa "Ordem total" tem a mesma jogada em cada posição
+nas três réplicas (linhas verdes), as três deram a cadeira 0 para P1 e o hash encadeado
+tem a mesma cor em todas.
+
+![Disputa de cadeira com ordem total: réplicas iguais](docs/checkpoint-3/painel-lamport.png)
+
+A mesma disputa com `ORDERING=fifo`, para comparar: as posições #5 a #7 têm jogadas
+diferentes em cada réplica (linhas vermelhas), e P2 deu a cadeira para P1 enquanto P1 e
+P3 deram para P3.
+
+![Disputa de cadeira com FIFO: réplicas divergem](docs/checkpoint-3/painel-fifo-diverge.png)
 
 ![Árvore de supervisão de um peer](docs/checkpoint-2/diagramas/supervisao.png)
 
@@ -313,6 +395,23 @@ outras duas para P3; os hashes encadeados ficaram com cores diferentes.
   mensagem por vez, então não precisa de lock; os jogadores leem da ETS sem entrar na
   fila (leitores e escritores). A árvore de supervisão (`rest_for_one`) e um processo
   por jogador isolam falhas [4].
+- **Relógio lógico em vez de relógio físico** [2, cap. 5], [6] (checkpoint 3): nenhum
+  servidor consulta o horário para decidir quem sentou primeiro; quem decide é o
+  carimbo `(L, id)`. Na disputa, os três pedidos saíram com o mesmo L, e o id do servidor
+  desempatou do mesmo jeito em todas as réplicas. O que importa não é que a ordem seja a
+  "real" — ninguém consegue saber qual foi —, mas que seja **a mesma** em todos.
+- **Por que funciona** [2, cap. 5], [6]: a cabeça da fila só é entregue com ACK de
+  todos. Se existisse uma mensagem com carimbo menor ainda a caminho, o processo que a
+  enviou também confirmou a cabeça: se enviou antes do ACK, o canal FIFO entrega a
+  mensagem antes do ACK (ela já estaria na fila); se enviou depois, o carimbo dela é
+  maior que o do ACK, que é maior que o da cabeça. Por isso o Lamport **depende** da
+  camada do checkpoint 1: sem o canal confiável e FIFO, a prova não vale.
+- **Custo e limitações** [2, cap. 5]: cada jogada custa N dados + N² ACKs (20 com 4
+  servidores, ~62 datagramas com 10% de perda), e a entrega espera o servidor **mais
+  lento**. Não há ponto único de falha, mas, se um servidor cai, a cabeça da fila nunca
+  recebe o ACK dele e **ninguém entrega mais nada** até ele voltar; tratar isso exigiria
+  detectar a falha e mudar o grupo. Com 3 ou 4 servidores (um por região), o custo é
+  aceitável para um jogo de cartas, em que cada jogada é rara perto do tempo de rede.
 
 ## Conclusão
 
@@ -329,8 +428,40 @@ Enquanto as jogadas não são concorrentes, as réplicas ficam iguais; quando du
 acontecem ao mesmo tempo em servidores diferentes, cada cópia decide de um jeito, e o
 FIFO não impede isso (8 de 8 mesas divergentes). O painel ao vivo torna isso visível
 na apresentação, mensagem por mensagem. Próximo passo: ordem total com relógios de
-Lamport (Parte 3) e com sequenciador (Parte 4), em que a disputa de cadeira passa a ter
-o mesmo vencedor em todas as réplicas.
+Lamport (Parte 3), em que a disputa de cadeira passa a ter o mesmo vencedor em todas as
+réplicas.
+
+**Checkpoint 3.** O multicast totalmente ordenado com relógios de Lamport fechou o
+problema: com as mesmas condições de perda e atraso, 0 de 120 posições fora de ordem e
+0 de 8 mesas divergentes, contra 116 de 120 e 8 de 8 com FIFO. O preço é pagar N + N²
+mensagens por jogada e esperar a confirmação de todos os servidores. No painel, a
+garantia fica visível: o mesmo carimbo `(L, id)` na mesma posição da fila em cada
+servidor e a mesma jogada em cada linha da faixa "Ordem total".
+
+**Decisões finais do projeto.**
+
+- **UDP** entre os servidores: o UDP não esconde perda nem reordenação, então a
+  confiabilidade que precisamos (número de sequência, ACK cumulativo, retransmissão)
+  é nossa, testada isolada e medida; e dá para injetar perda e atraso por datagrama para
+  simular regiões. Com TCP, cada par já teria FIFO, mas o problema que o trabalho estuda
+  ficaria escondido dentro do kernel.
+- **Multicast** como forma de replicar: cada jogada é enviada a todos os servidores,
+  inclusive a quem a recebeu, e cada um aplica na sua cópia — a máquina de estados
+  replicada. Nenhum servidor aplica a própria jogada antes dos outros.
+- **Filas** em cada camada: a fila de espera do canal FIFO segura o que chegou adiantado;
+  a fila do Lamport, ordenada por `(L, id)`, segura o que ainda não foi confirmado por
+  todos; e a caixa de mensagens da réplica (um único escritor) aplica um comando por vez,
+  sem lock.
+- **Lamport** para a ordem total: sem coordenador central, sem ponto único de falha e com
+  prova de correção simples sobre o canal FIFO que já tínhamos; o custo N + N² é aceitável
+  para poucos servidores.
+- **RPC** entre o nó de controle e os peers: no checkpoint 1, socket e RPC resolveram a
+  mesma comunicação, mas o RPC (`:erpc`) foi ~5× mais rápido, com menos código e erros
+  remotos que voltam como exceção. O argumento contra o RPC era o acoplamento à
+  plataforma, e ele não pesa aqui: controle e peers são todos nós Elixir nossos, e o
+  navegador do jogador nunca fala com eles por RPC (usa HTTP e WebSocket). O modo socket
+  continua no código (`CONTROL=socket`) como comparação; em produção, o RPC exige
+  proteger o *cookie* e as portas da distribuição Erlang.
 
 ## Referências
 
@@ -345,3 +476,5 @@ o mesmo vencedor em todas as réplicas.
   errors**. 2003. Tese (Doutorado) — KTH Royal Institute of Technology, Estocolmo, 2003.
 - [5] COSTA, F. M. **MPComm**. GitHub, [s.d.]. Disponível em:
   https://github.com/professorfabio/MPComm. Acesso em: 5 nov. 2026.
+- [6] LAMPORT, L. Time, clocks, and the ordering of events in a distributed system.
+  **Communications of the ACM**, v. 21, n. 7, p. 558–565, 1978.
