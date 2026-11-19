@@ -25,6 +25,12 @@ defmodule TrucoOn.Multicast.Ordering do
               {term, [send_spec], [delivery]}
   @callback pending(state :: term) :: non_neg_integer
 
+  @doc """
+  Retrato da fila da política para o painel: `%{queue: [...], ...}`, com
+  cada mensagem descrita por `describe` (que recebe a mensagem interna).
+  """
+  @callback snapshot(state :: term, describe :: (tuple -> map)) :: map
+
   @doc "Módulo da política para cada modo configurável."
   def module(:none), do: TrucoOn.Multicast.Ordering.Basic
   def module(:fifo), do: TrucoOn.Multicast.Ordering.Basic
@@ -63,4 +69,8 @@ defmodule TrucoOn.Multicast.Ordering.Basic do
 
   @impl true
   def pending(_st), do: 0
+
+  # sem fila: entrega assim que o canal entrega
+  @impl true
+  def snapshot(_st, _describe), do: %{queue: []}
 end

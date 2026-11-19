@@ -105,4 +105,26 @@ defmodule TrucoOn.Multicast.Reliable do
   @doc "Quantas mensagens estão paradas na fila de espera (em todos os canais)."
   def held_back(%__MODULE__{in: inn}),
     do: Enum.reduce(inn, 0, fn {_s, ch}, n -> n + map_size(ch.buffer) end)
+
+  @doc """
+  Retrato do canal para o painel: para cada remetente, o próximo número
+  esperado e as mensagens paradas na fila de espera; para cada destino, os
+  números ainda sem ACK. `describe` transforma a mensagem interna em rótulo.
+  """
+  def snapshot(%__MODULE__{} = r, describe, limit \\ 12) do
+    %{
+      in:
+        Map.new(r.in, fn {src, ch} ->
+          held =
+            ch.buffer
+            |> Enum.sort_by(&elem(&1, 0))
+            |> Enum.take(limit)
+            |> Enum.map(fn {seq, inner} -> Map.put(describe.(inner), :seq, seq) end)
+
+          {src, %{expected: ch.expected, held: held}}
+        end),
+      unacked:
+        Map.new(r.out, fn {dest, ch} -> {dest, ch.unacked |> Map.keys() |> Enum.sort()} end)
+    }
+  end
 end

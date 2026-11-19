@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrucoON · Painel do multicast</title>
+<link rel="stylesheet" href="/painel/assets/painel.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="eyebrow">TrucoON · ao vivo</span>
+    <h1>Painel do multicast</h1>
+  </div>
+  <div class="status">
+    <span id="mode" class="badge">conectando…</span>
+    <span id="consistency" class="badge muted">—</span>
+  </div>
+  <p id="mode-text" class="mode-text"></p>
+</header>
+
+<section id="controls" class="controls" hidden>
+  <label class="ctl">
+    <span>Câmera lenta (atraso da rede)</span>
+    <input id="delay" type="range" min="0" max="2500" step="50" value="0">
+    <output id="delay-out">0 ms</output>
+  </label>
+  <label class="ctl">
+    <span>Perda de pacotes</span>
+    <input id="loss" type="range" min="0" max="40" step="5" value="0">
+    <output id="loss-out">0%</output>
+  </label>
+  <label class="toggle"><input id="show-acks" type="checkbox"> ACKs do canal FIFO</label>
+  <div class="actions">
+    <button id="race" class="gold">Disputa de cadeira</button>
+    <button id="clear" class="ghost">Limpar</button>
+  </div>
+</section>
+
+<section id="race-result" class="race" hidden></section>
+
+<main id="board">
+  <svg id="net" aria-label="Mensagens trafegando entre os peers"></svg>
+  <div id="peers" class="peers"></div>
+</main>
+
+<footer class="legend">
+  <span><i class="dot msg"></i>mensagem (cor = mensagem)</span>
+  <span><i class="dot tack"></i>ACK do Lamport</span>
+  <span><i class="dot req"></i>pedido ao sequenciador</span>
+  <span><i class="dot rack"></i>ACK do canal FIFO</span>
+  <span><i class="dot lost">✕</i>perdida na rede</span>
+  <span><i class="dot retx"></i>retransmissão</span>
+</footer>
+
+<script src="/painel/vendor/phoenix.min.js"></script>
+<script src="/painel/assets/painel.js"></script>
+</body>
+</html>

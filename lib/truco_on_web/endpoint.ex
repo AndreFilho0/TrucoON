@@ -14,6 +14,16 @@ defmodule TrucoOnWeb.Endpoint do
   # WebSocket dos jogadores (Phoenix Channels)
   socket "/socket", TrucoOnWeb.UserSocket, websocket: true, longpoll: false
 
+  # Painel ao vivo do multicast (/painel): WebSocket só de leitura, a
+  # página com seus arquivos e o cliente JS de Channels do próprio Phoenix.
+  socket "/painel/socket", TrucoOnWeb.PainelSocket, websocket: true, longpoll: false
+  plug Plug.Static, at: "/painel/assets", from: {:truco_on, "priv/painel"}, gzip: false
+
+  plug Plug.Static,
+    at: "/painel/vendor",
+    from: {:phoenix, "priv/static"},
+    only: ~w(phoenix.min.js)
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # You should set gzip to true if you are running phx.digest

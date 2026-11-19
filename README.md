@@ -5,7 +5,11 @@
 Trabalho de **Sistemas Operacionais** e **Sistemas Distribuídos (INF0344)** — UFG,
 2026/2. O projeto parte do [MPComm](https://github.com/professorfabio/MPComm) do Prof.
 Fábio M. Costa, reescrito em **Elixir/Erlang** (com a autorização do professor).
-Código deste checkpoint: tag `parte-1b`.
+Este README é o **relatório** do trabalho e é atualizado a cada checkpoint. Código do
+checkpoint 1: tag `parte-1b`. Código do checkpoint 2: tag `parte-2` (aplicação
+replicada) e a branch `checkpoint-2` (painel ao vivo do multicast). Detalhes de teoria e
+prática de cada entrega em [`docs/checkpoint-1/relatorio.md`](docs/checkpoint-1/relatorio.md)
+e [`docs/checkpoint-2/relatorio.md`](docs/checkpoint-2/relatorio.md).
 
 ## Equipe
 
@@ -19,6 +23,7 @@ Equipe **ZAP**:
 ## Apresentações
 
 - Checkpoint 1 (05/11): https://docs.google.com/presentation/d/1XnzTkuvcFeIFaiBl8MVHFOCgGdjfAJenacRyqSoGmwE/edit?slide=id.p1#slide=id.p1
+- Checkpoint 2 (19/11): https://docs.google.com/presentation/d/18mQT3qAogjV7CZVnszwLlKvBC1TlWlZRCGCNS4gDJNo/edit?usp=sharing
 
 ## Resumo
 
@@ -34,7 +39,17 @@ perdas e violações de ordem por remetente em relação ao canal UDP sem tratam
 comparar a latência de socket contra RPC. O canal confiável zerou perdas, duplicatas e
 violações de FIFO, e o RPC se mostrou cerca de 5× mais rápido que o socket por pedido.
 Conclui-se que o FIFO garante a ordem de cada remetente, mas não uma ordem igual para
-todos os servidores — problema que os próximos checkpoints resolvem.
+todos os servidores.
+
+No **checkpoint 2**, as mensagens viraram jogadas de truco. O jogo passou a ser uma
+**máquina de estados replicada**: regras puras e determinísticas (a semente do
+embaralhamento viaja no comando), uma réplica por servidor que só aplica um comando
+depois que ele volta pelo multicast, e um único escritor por servidor. Com jogadas
+simultâneas em servidores diferentes, o FIFO não basta: na disputa de cadeira,
+**8 de 8 mesas divergiram**, tanto sem tratamento quanto com FIFO. Para mostrar isso ao
+vivo, construímos um **painel do multicast** que anima as mensagens indo de um servidor
+para o outro, paradas nas filas e chegando à réplica. A ordem total (Lamport e
+sequenciador) é o tema do próximo checkpoint.
 
 ## Introdução
 
@@ -71,6 +86,15 @@ Construir a base de comunicação do grupo de servidores:
 - entender e aplicar, sobre esse código, os conceitos de processo, IPC, socket, RPC,
   entrega confiável e ordem FIFO.
 
+No checkpoint 2, sobre essa base:
+
+- transformar o truco numa **máquina de estados replicada**, em que cada jogada é um
+  comando multicast aplicado em todas as réplicas;
+- garantir **determinismo** (mesmo comando, mesmo resultado em qualquer réplica) e um
+  **único escritor** por servidor, sem lock;
+- **medir** se as réplicas divergem com jogadas concorrentes sem ordem total;
+- **mostrar** o caminho de cada mensagem ao vivo, num painel, para a apresentação.
+
 ## Metodologia
 
 ### Conjunto de dados (experimentos)
@@ -83,6 +107,9 @@ máquina só com injeção de falhas para simular regiões diferentes.
   canal confiável.
 - **Experimento de transporte** (`V.transport_benchmark(300)`): 300 pedidos para cada
   um de 3 peers, pelo mesmo caminho de código, variando só o transporte (socket ou RPC).
+- **Disputa de cadeira** (`S.seat_race(rooms: 8)`, checkpoint 2): 8 mesas 2x2 com os
+  jogadores espalhados por 4 peers, todos pedindo as mesmas cadeiras ao mesmo tempo. No
+  fim, o Verifier compara o hash de cada mesa entre as réplicas.
 
 ### Modelos (stack e infraestrutura)
 
@@ -96,8 +123,17 @@ máquina só com injeção de falhas para simular regiões diferentes.
 - **Multicast:** `:gen_udp` com envio por peer e recepção `active: true`
   (`lib/truco_on/peer/multicast.ex`), com injeção de `LOSS`/`DELAY`.
 - **Canal confiável e FIFO:** estrutura pura, sem rede, testada isolada
-  (`lib/truco_on/multicast/reliable.ex`): `seq` crescente, retransmissão após 150 ms,
+  (`lib/truco_on/multicast/reliable.ex`): `seq` crescente, retransmissão após 150 ms
+  (ou mais, quando o atraso configurado exige, para não retransmitir antes do ACK voltar),
   descarte de duplicatas, fila de espera e ACK cumulativo.
+- **Aplicação (checkpoint 2):** regras do truco como funções puras
+  (`lib/truco_on/truco/`), a réplica de mesas (`lib/truco_on/peer/replica.ex`, um
+  GenServer que é o único escritor, com o estado publicado numa ETS de leitura
+  concorrente), REST sem estado com token assinado e WebSocket com um processo por
+  jogador (`lib/truco_on_web/`). Frontend em Expo + React Native Web (`app/`).
+- **Painel ao vivo (checkpoint 2):** o multicast e a réplica publicam eventos de
+  rastreamento (`lib/truco_on/peer/trace.ex`) num canal Phoenix só de leitura; a página
+  `/painel` (`priv/painel/`) conecta em todos os peers e anima tudo.
 - **Infraestrutura:** sem banco e sem Docker (estado em memória, replicado). Phoenix e
   Bandit vêm pelo `mix`, versões fixadas em `mix.lock`.
 
@@ -114,15 +150,38 @@ scripts/run.sh 'V.transport_benchmark(300)'   # socket × RPC
 scripts/down.sh
 ```
 
+Checkpoint 2 (jogo replicado e painel):
+
+```bash
+scripts/build_web.sh                          # frontend do jogo, servido por cada peer
+ORDERING=fifo scripts/up.sh 3
+scripts/run.sh 'S.seat_race(rooms: 8)'        # mesas divergentes sem ordem total
+# jogo:   http://127.0.0.1:4001
+# painel: http://127.0.0.1:4001/painel
+scripts/down.sh
+```
+
+**Painel ao vivo do multicast** (`/painel`): mostra os pacotes voando entre os peers, a
+fila de espera do canal FIFO, a fila da ordenação e os comandos aplicados em cada
+réplica, com o hash encadeado. As jogadas aparecem com nome: "TRUCO!", "SEIS!",
+"NOVE!", "DOZE!", "aceita o seis", "corre do nove" e a carta jogada ("joga 4♣ (zap)").
+O controle "câmera lenta" aumenta o atraso da rede, "perda de pacotes" descarta
+datagramas e o botão "Disputa de cadeira" faz um jogador em cada peer pedir a cadeira
+0 ao mesmo tempo. Os controles só funcionam com `PAINEL_CONTROLE=1`, que o
+`scripts/up.sh` liga por padrão; num servidor público, o painel fica só de leitura.
+
 Testes: `mix test` — `test/truco_on/multicast/protocols_test.exs` (rede simulada com
-30% de perda) e `test/truco_on/integration/group_test.exs` (blocos "Parte 1a" e
-"Parte 1b").
+30% de perda), `test/truco_on/integration/group_test.exs` (blocos "Parte 1a" e
+"Parte 1b"), `test/truco_on/truco/` (regras, jogo e mesas) e
+`test/truco_on/integration/divergence_test.exs` (réplicas divergem sem ordem total).
 
 ### Métricas
 
 - Multicast: mensagens **perdidas**, **duplicadas**, **violações de FIFO** e **posições
   fora de ordem**; custo em **datagramas UDP por multicast**.
 - Transporte: latência por pedido (**média**, **mediana**, **p99**).
+- Réplicas (checkpoint 2): **mesas divergentes** (hash da mesa diferente entre réplicas)
+  e se a **sequência de comandos** aplicada é a mesma (hash encadeado).
 
 ### Fluxograma
 
@@ -132,11 +191,17 @@ Fases do projeto e visão geral da arquitetura (nó de controle + grupo de peers
 |---|---|---|
 | 1a | Trocar sockets por RPC no cliente-servidor e comparar | ✅ |
 | 1b | Perda de mensagens + ordem FIFO no multicast, com sockets | ✅ |
-| 2 | Aplicação em que a ordem é crítica (truco replicado) | próximas entregas |
+| 2 | Aplicação em que a ordem é crítica (truco replicado) + painel ao vivo | ✅ |
 | 3 | Coordenação por ordem total (Lamport, cap. 5) | próximas entregas |
 | 4 | Coordenação mais leve (sequenciador, cap. 7) | próximas entregas |
 
 ![Visão geral: nó de controle e grupo de peers](docs/checkpoint-1/diagramas/visao-geral.png)
+
+Caminho de uma jogada no checkpoint 2: o servidor não aplica a jogada do próprio
+jogador na hora; ele manda para o grupo e só responde depois que o multicast a entrega,
+como em todas as outras réplicas.
+
+![Caminho de uma jogada](docs/checkpoint-2/diagramas/fluxo-comando.png)
 
 ## Resultados
 
@@ -159,7 +224,29 @@ Transporte — 300 pedidos para cada um de 3 peers (`V.transport_benchmark(300)`
 | Socket TCP (uma conexão por pedido) | 143 µs | 133 µs | 203 µs |
 | RPC (`:erpc`) | 28 µs | 27 µs | 56 µs |
 
-### Multimídia (diagramas)
+Réplicas — disputa de cadeira, 8 mesas 2x2, 4 peers (`S.seat_race(rooms: 8)`):
+
+| `ORDERING` | Mesas divergentes |
+|---|---|
+| `none` (sem tratamento) | 8 de 8 |
+| `fifo` (canal confiável) | 8 de 8 |
+
+### Multimídia (painel e diagramas)
+
+Painel ao vivo do multicast durante uma partida (modo `fifo`, câmera lenta em 1600 ms):
+cada coluna é um servidor, e cada jogada desce pelas camadas ① rede, ② canal FIFO,
+③ ordenação e ④ réplica. O hash encadeado com a mesma cor nas três colunas indica que
+as réplicas aplicaram a mesma sequência.
+
+![Painel ao vivo do multicast durante uma partida](docs/checkpoint-2/painel.png)
+
+A mesma tela na disputa de cadeira: P1, P2 e P3 pedem a cadeira 0 ao mesmo tempo, cada
+um por um servidor. Sem ordem total, a réplica do Peer 1 deu a cadeira para P1 e as
+outras duas para P3; os hashes encadeados ficaram com cores diferentes.
+
+![Disputa de cadeira divergindo no modo FIFO](docs/checkpoint-2/painel-disputa-fifo.png)
+
+![Árvore de supervisão de um peer](docs/checkpoint-2/diagramas/supervisao.png)
 
 ![O mesmo pedido por socket TCP e por RPC](docs/diagramas/1a-socket-vs-rpc.png)
 
@@ -183,17 +270,38 @@ Transporte — 300 pedidos para cada um de 3 peers (`V.transport_benchmark(300)`
 - **Limite do FIFO:** o FIFO ordena as mensagens *de cada remetente*, mas não impõe uma
   ordem igual para todos os servidores: mensagens de remetentes diferentes ainda chegam
   em ordens diferentes (116 de 120 posições fora de ordem mesmo com FIFO). Garantir uma
-  ordem única para todos é o problema de ordem total, abordado nos próximos checkpoints.
+  ordem única para todos é o problema de ordem total.
+- **Máquina de estados replicada** [2, cap. 7] (checkpoint 2): se todas as réplicas
+  começam iguais e aplicam os mesmos comandos na mesma ordem, terminam iguais. Por isso
+  as regras são puras e a semente do embaralhamento viaja no comando: sem relógio local
+  nem timers, a única fonte de diferença entre réplicas passa a ser a ordem.
+- **Condição de corrida entre réplicas** [1, cap. 2], [2, cap. 7]: o mesmo problema da
+  seção crítica de SO, agora entre servidores. Dois jogadores pedem a mesma cadeira por
+  servidores diferentes, e cada réplica dá a cadeira para quem chegou primeiro nela. O
+  FIFO não impede isso (8 de 8 mesas divergiram), e o painel mostra o momento exato em
+  que as réplicas se separam. O mesmo vale para truco × carta e aceito × corro.
+- **Um único escritor** [1, cap. 2], [3]: a réplica é um GenServer que processa uma
+  mensagem por vez, então não precisa de lock; os jogadores leem da ETS sem entrar na
+  fila (leitores e escritores). A árvore de supervisão (`rest_for_one`) e um processo
+  por jogador isolam falhas [4].
 
 ## Conclusão
 
-Os objetivos do checkpoint foram alcançados: socket e RPC resolvem a mesma comunicação
+**Checkpoint 1.** Os objetivos foram alcançados: socket e RPC resolvem a mesma comunicação
 cliente-servidor, com o RPC entregando menos código e melhor tratamento de erros e o
 socket entregando independência de plataforma e controle sobre o que é exposto; e o
 canal confiável zerou perdas, duplicatas e violações de FIFO, pagando com mais
 datagramas por mensagem. Ficou também evidente o limite do FIFO: ele garante a ordem de
-cada remetente, mas não uma ordem igual para todos os servidores — ponto de partida das
-Partes 3 e 4 (ordem total e coordenação mais leve).
+cada remetente, mas não uma ordem igual para todos os servidores.
+
+**Checkpoint 2.** O truco virou uma máquina de estados replicada: regras
+determinísticas, um único escritor por servidor e os mesmos comandos em cada réplica.
+Enquanto as jogadas não são concorrentes, as réplicas ficam iguais; quando duas jogadas
+acontecem ao mesmo tempo em servidores diferentes, cada cópia decide de um jeito, e o
+FIFO não impede isso (8 de 8 mesas divergentes). O painel ao vivo torna isso visível
+na apresentação, mensagem por mensagem. Próximo passo: ordem total com relógios de
+Lamport (Parte 3) e com sequenciador (Parte 4), em que a disputa de cadeira passa a ter
+o mesmo vencedor em todas as réplicas.
 
 ## Referências
 

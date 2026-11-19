@@ -22,6 +22,7 @@ import Config
 #   REGION         rótulo da região (só exibição)            (local)
 #   LOSS           probabilidade de perder um pacote UDP     (0.0)
 #   DELAY_MIN/MAX  atraso artificial por pacote, em ms       (0/0)
+#   PAINEL_CONTROLE 1 libera os comandos de demo do /painel  (desligado)
 
 env = fn key, default -> System.get_env(key, default) end
 int = fn key, default -> String.to_integer(System.get_env(key, to_string(default))) end
@@ -54,6 +55,7 @@ config :truco_on,
   control_transport: pick.("CONTROL", "rpc", [:rpc, :socket]),
   ordering: pick.("ORDERING", "total", [:none, :fifo, :total, :sequencer]),
   group_size: int.("GROUP_SIZE", 3),
+  painel_controle: env.("PAINEL_CONTROLE", "0") in ["1", "true"],
   control_node: String.to_atom(env.("CONTROL_NODE", "control@127.0.0.1")),
   control_host: env.("CONTROL_HOST", "127.0.0.1"),
   gm_port: int.("GM_PORT", 5680),

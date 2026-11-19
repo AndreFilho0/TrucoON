@@ -13,6 +13,15 @@ defmodule TrucoOnWeb.Router do
     get "/debug", ApiController, :debug
     post "/rooms", ApiController, :create_room
     get "/rooms/:code", ApiController, :show_room
+
+    # painel: demonstração (só com PAINEL_CONTROLE=1)
+    post "/painel/faults", PainelController, :faults
+    post "/painel/race", PainelController, :race_setup
+    post "/painel/race/seat", PainelController, :race_seat
+  end
+
+  scope "/", TrucoOnWeb do
+    get "/painel", PainelController, :index
   end
 
   # Frontend (Expo Web exportado em priv/static): qualquer outra rota GET
