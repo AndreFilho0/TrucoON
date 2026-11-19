@@ -79,4 +79,15 @@ defmodule TrucoOn.Multicast.Ordering.Sequencer do
 
   @impl true
   def pending(%__MODULE__{buffer: b}), do: map_size(b)
+
+  @impl true
+  def snapshot(%__MODULE__{} = st, describe) do
+    queue =
+      st.buffer
+      |> Enum.sort_by(&elem(&1, 0))
+      |> Enum.take(12)
+      |> Enum.map(fn {g, {id, payload}} -> describe.({:ord, g, id, payload}) end)
+
+    %{queue: queue, expected: st.expected, sequencer: st.sequencer, next_g: st.next_g}
+  end
 end

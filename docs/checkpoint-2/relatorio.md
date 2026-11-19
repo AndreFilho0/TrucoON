@@ -175,11 +175,29 @@ scripts/build_web.sh
 ORDERING=fifo DELAY_MAX=60 scripts/up.sh 3
 ```
 
+**No jogo:**
+
 1. Abrir `http://localhost:4001`, criar uma mesa 2x2 e abrir o painel ⚙ Réplicas.
 2. Abrir o link de convite em abas anônimas, nas portas `:4002` e `:4003`, para cada
    jogador ficar num servidor diferente.
 3. Todos tocam em "Sentar" ao mesmo tempo, ou `scripts/run.sh 'S.seat_race(rooms: 8)'`.
 4. O painel fica vermelho: as réplicas divergiram.
+
+**No painel ao vivo do multicast** (`http://localhost:4001/painel`):
+
+1. Subir a "câmera lenta" (atraso da rede) para uns 700 ms.
+2. Clicar em "Disputa de cadeira": um jogador em cada peer pede a cadeira 0 ao mesmo
+   tempo.
+3. Acompanhar cada comando: o ponto voando de um peer para os outros (①), a fila de
+   espera do canal FIFO (②), a ordenação (③) e a réplica aplicando (④), com o hash
+   encadeado. Em `fifo`, cada réplica dá a cadeira para um jogador diferente; com
+   `ORDERING=total` (Lamport) ou `sequencer`, todas concordam.
+4. Com "Perda de pacotes" ligada, aparecem o ✕ do pacote perdido, a mensagem seguinte
+   parada na fila de espera e a retransmissão chegando para destravar.
+
+O painel só lê eventos dos peers (`lib/truco_on/peer/trace.ex`,
+`lib/truco_on_web/channels/painel_socket.ex`). Os controles de atraso, perda e a
+disputa só funcionam com `PAINEL_CONTROLE=1`, que o `scripts/up.sh` liga por padrão.
 
 ## 11. Conclusão
 

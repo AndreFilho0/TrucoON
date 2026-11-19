@@ -38,6 +38,7 @@ defmodule TrucoOn.Peer.Multicast do
 
   alias TrucoOn.Multicast.{Ordering, Reliable}
   alias TrucoOn.Peer
+  alias TrucoOn.Peer.Trace
 
   @tick_ms 25
   @rto_ms 150
@@ -62,6 +63,9 @@ defmodule TrucoOn.Peer.Multicast do
 
   def set_faults(inst, faults),
     do: GenServer.call(Peer.via(inst, :multicast), {:set_faults, faults})
+
+  @doc "Retrato das filas deste peer (para o painel)."
+  def queues(inst), do: GenServer.call(Peer.via(inst, :multicast), :queues)
 
   ## Init ----------------------------------------------------------------------
 
@@ -178,6 +182,8 @@ defmodule TrucoOn.Peer.Multicast do
     {:reply, info, state}
   end
 
+  def handle_call(:queues, _from, state), do: {:reply, queues_snapshot(state), state}
+
   def handle_call(:stats, _from, state), do: {:reply, state.stats, state}
   def handle_call(:reset_stats, _from, state), do: {:reply, :ok, %{state | stats: %{}}}
 
@@ -195,7 +201,7 @@ defmodule TrucoOn.Peer.Multicast do
       case safe_decode(bin) do
         {:ok, packet} when state.ready and is_tuple(packet) and tuple_size(packet) >= 3 ->
           if Map.has_key?(state.addrs, elem(packet, 1)),
-            do: on_packet(state, packet),
+            do: state |> on_packet(packet) |> trace_queues(),
             else: bump(state, "recv.unknown_sender")
 
         # antes do grupo formado não sabemos responder; o remetente retransmite
@@ -210,16 +216,17 @@ defmodule TrucoOn.Peer.Multicast do
   end
 
   def handle_info(:tick, %{ready: true} = state) do
-    {rel, late} = Reliable.due(state.rel, now(), @rto_ms)
+    {rel, late} = Reliable.due(state.rel, now(), rto(state))
     state = %{state | rel: rel}
 
     state =
       Enum.reduce(late, state, fn {dest, seq, inner}, st ->
         st
         |> bump("sent.retransmissions")
-        |> transmit(dest, {:d, st.my_id, seq, inner})
+        |> transmit(dest, {:d, st.my_id, seq, inner}, true)
       end)
 
+    state = if late != [], do: trace_queues(state), else: state
     {:noreply, state}
   end
 
@@ -233,7 +240,10 @@ defmodule TrucoOn.Peer.Multicast do
   ## Pacotes -------------------------------------------------------------------
 
   defp on_packet(state, {:r, src, inner}) do
-    state |> bump("recv.raw") |> to_ordering(src, inner)
+    state
+    |> bump("recv.raw")
+    |> trace_recv({:r, src, inner}, "in_order")
+    |> to_ordering(src, inner)
   end
 
   defp on_packet(state, {:d, src, seq, inner}) do
@@ -244,13 +254,16 @@ defmodule TrucoOn.Peer.Multicast do
       |> bump("recv.data")
       |> bump("recv.#{status}")
       |> bump("sent.acks")
+      |> trace_recv({:d, src, seq, inner}, Atom.to_string(status))
       |> transmit(src, {:a, state.my_id, cum})
 
     Enum.reduce(delivered, state, fn inner, st -> to_ordering(st, src, inner) end)
   end
 
   defp on_packet(state, {:a, src, cum}) do
-    %{state | rel: Reliable.on_ack(state.rel, src, cum)} |> bump("recv.acks")
+    %{state | rel: Reliable.on_ack(state.rel, src, cum)}
+    |> bump("recv.acks")
+    |> trace_recv({:a, src, cum}, "ack")
   end
 
   defp on_packet(state, _other), do: bump(state, "recv.garbage")
@@ -259,7 +272,11 @@ defmodule TrucoOn.Peer.Multicast do
     {ord, sends, deliveries} = state.ord_mod.on_receive(state.ord, src, inner)
     state = send_all(%{state | ord: ord}, sends)
 
-    Enum.each(deliveries, fn d -> Peer.dispatch(state.inst, d) end)
+    Enum.each(deliveries, fn d ->
+      trace_deliver(state, d)
+      Peer.dispatch(state.inst, d)
+    end)
+
     bump(state, "delivered", length(deliveries))
   end
 
@@ -267,7 +284,7 @@ defmodule TrucoOn.Peer.Multicast do
 
   defp do_multicast(state, id, payload) do
     {ord, sends} = state.ord_mod.multicast(state.ord, id, payload)
-    %{state | ord: ord} |> bump("multicasts") |> send_all(sends)
+    %{state | ord: ord} |> bump("multicasts") |> send_all(sends) |> trace_queues()
   end
 
   defp send_all(state, sends) do
@@ -289,7 +306,7 @@ defmodule TrucoOn.Peer.Multicast do
   end
 
   # Envia de fato, aplicando perda e atraso artificiais.
-  defp transmit(state, dest, packet) do
+  defp transmit(state, dest, packet, retx \\ false) do
     addr = Map.fetch!(state.addrs, dest)
     bin = :erlang.term_to_binary(packet)
     %{loss: loss, delay_min: dmin, delay_max: dmax} = state.faults
@@ -297,18 +314,118 @@ defmodule TrucoOn.Peer.Multicast do
 
     cond do
       loss > 0 and :rand.uniform() < loss ->
-        bump(state, "sent.dropped_by_fault")
+        state
+        |> bump("sent.dropped_by_fault")
+        |> trace_send(dest, packet, retx, true, 0)
 
       dmax > 0 ->
         delay = dmin + :rand.uniform(max(dmax - dmin, 0) + 1) - 1
         Process.send_after(self(), {:send_later, addr, bin}, delay)
-        state
+        trace_send(state, dest, packet, retx, false, delay)
 
       true ->
         :gen_udp.send(state.socket, addr, bin)
-        state
+        trace_send(state, dest, packet, retx, false, 0)
     end
   end
+
+  ## Painel (rastreamento) ------------------------------------------------------
+  #
+  # Cada função devolve o `state` intacto, para encaixar nos pipelines. Os
+  # eventos só são montados quando o painel está assistindo este peer.
+
+  defp trace_send(state, dest, packet, retx, dropped, delay) do
+    if Trace.enabled?(state.inst) do
+      Trace.emit(state.inst, %{
+        ev: "send",
+        peer: state.my_id,
+        to: dest,
+        key: packet_key(packet, state.my_id, dest),
+        pkt: packet_info(packet, state.inst),
+        retx: retx,
+        dropped: dropped,
+        delay: delay,
+        t: wall()
+      })
+    end
+
+    state
+  end
+
+  defp trace_recv(state, packet, status) do
+    if Trace.enabled?(state.inst) do
+      src = elem(packet, 1)
+
+      Trace.emit(state.inst, %{
+        ev: "recv",
+        peer: state.my_id,
+        from: src,
+        key: packet_key(packet, src, state.my_id),
+        pkt: packet_info(packet, state.inst),
+        status: status,
+        t: wall()
+      })
+    end
+
+    state
+  end
+
+  defp trace_deliver(state, d) do
+    if Trace.enabled?(state.inst) do
+      Trace.emit(state.inst, %{
+        ev: "deliver",
+        peer: state.my_id,
+        id: Trace.msg_id(d.id),
+        origin: d.origin,
+        order: order_label(d.order),
+        msg: Trace.payload(state.inst, d.payload),
+        t: wall()
+      })
+    end
+  end
+
+  defp trace_queues(state) do
+    if Trace.enabled?(state.inst) do
+      Trace.emit(state.inst, Map.merge(queues_snapshot(state), %{ev: "queues", t: wall()}))
+    end
+
+    state
+  end
+
+  defp queues_snapshot(state) do
+    %{
+      peer: state.my_id,
+      mode: state.mode,
+      channel: Reliable.snapshot(state.rel, &Trace.inner(state.inst, &1)),
+      ordering:
+        if(state.ord,
+          do: state.ord_mod.snapshot(state.ord, &Trace.inner(state.inst, &1)),
+          else: %{queue: []}
+        )
+    }
+  end
+
+  # Mesma chave no envio e na chegada, para o painel ligar as duas pontas.
+  defp packet_key({:d, _, seq, _}, src, dest), do: "d:#{src}>#{dest}:#{seq}"
+  defp packet_key({:a, _, cum}, src, dest), do: "a:#{src}>#{dest}:#{cum}"
+  defp packet_key({:r, _, inner}, src, dest), do: "r:#{src}>#{dest}:#{:erlang.phash2(inner)}"
+
+  defp packet_info({:d, _, seq, inner}, inst),
+    do: Map.merge(Trace.inner(inst, inner), %{layer: "d", seq: seq})
+
+  defp packet_info({:a, _, cum}, _inst), do: %{layer: "a", kind: "rack", cum: cum}
+  defp packet_info({:r, _, inner}, inst), do: Map.put(Trace.inner(inst, inner), :layer, "r")
+
+  defp order_label({:lamport, ts, origin}), do: "ts #{ts}.#{origin}"
+  defp order_label({:global_seq, g}), do: "g #{g}"
+  defp order_label(_), do: nil
+
+  defp wall, do: System.system_time(:millisecond)
+
+  # O tempo de retransmissão precisa ser maior que a ida e volta (dado +
+  # ACK). Com atraso artificial grande (a "câmera lenta" do painel), um RTO
+  # fixo de 150 ms retransmitiria toda mensagem várias vezes à toa.
+  defp rto(state), do: max(@rto_ms, 2 * state.faults.delay_max + 50)
 
   ## Auxiliares ----------------------------------------------------------------
 

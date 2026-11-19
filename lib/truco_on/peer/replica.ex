@@ -38,7 +38,7 @@ defmodule TrucoOn.Peer.Replica do
   require Logger
 
   alias TrucoOn.Peer
-  alias TrucoOn.Peer.Multicast
+  alias TrucoOn.Peer.{Multicast, Trace}
   alias TrucoOn.Truco.Rooms
 
   @submit_timeout 15_000
@@ -137,8 +137,22 @@ defmodule TrucoOn.Peer.Replica do
 
   def handle_call(:log, _from, state), do: {:reply, Enum.reverse(state.log), state}
 
+  # Para o painel: contagem, hash encadeado e os últimos comandos aplicados.
+  def handle_call(:summary, _from, state) do
+    summary = %{
+      applied: state.applied,
+      chain: state.chain |> Base.encode16(case: :lower) |> binary_part(0, 12),
+      recent: state.log |> Enum.take(12)
+    }
+
+    {:reply, summary, state}
+  end
+
   @impl true
   def handle_cast({:deliver, %{payload: {:cmd, uid, cmd}} = d}, state) do
+    # rótulo para o painel/log a partir da mesa ANTES do comando (é ela que
+    # diz se um :truco vale truco, seis, nove ou doze)
+    label = Trace.command(cmd, Map.get(state.rooms, Rooms.command_code(cmd)))
     {rooms, code, result, events} = Rooms.apply(state.rooms, cmd)
 
     # ETS: publica a nova versão (ou remove a mesa fechada)
@@ -167,6 +181,7 @@ defmodule TrucoOn.Peer.Replica do
       uid: uid,
       origin: d.origin,
       cmd: elem(cmd, 0),
+      label: label,
       code: code,
       ok: match?({:ok, _}, result)
     }
@@ -180,8 +195,35 @@ defmodule TrucoOn.Peer.Replica do
         waiters: expire(waiters)
     }
 
+    trace_apply(state, d, label, code, result, rooms, waiter != nil)
     {:noreply, state}
   end
+
+  # Painel: o que a réplica fez com o comando entregue.
+  defp trace_apply(state, d, label, code, result, rooms, mine) do
+    if Trace.enabled?(state.inst) do
+      room = Map.get(rooms, code)
+
+      Trace.emit(state.inst, %{
+        ev: "apply",
+        id: Trace.msg_id(d.id),
+        origin: d.origin,
+        label: label,
+        code: code,
+        ok: match?({:ok, _}, result),
+        reason: with({:error, r} <- result, do: to_string(r), else: (_ -> nil)),
+        mine: mine,
+        applied: state.applied,
+        chain: state.chain |> Base.encode16(case: :lower) |> binary_part(0, 12),
+        room_hash: room && room |> hash() |> binary_part(0, 12),
+        room: room && TrucoOn.Truco.Rooms.preview(room) |> Map.take([:seats, :members, :status]),
+        t: System.system_time(:millisecond)
+      })
+    end
+  end
+
+  @doc false
+  def summary(inst), do: GenServer.call(Peer.via(inst, :replica), :summary)
 
   defp expire(waiters) do
     limit = now() - @submit_timeout

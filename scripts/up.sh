@@ -16,6 +16,8 @@ N="${1:-3}"
 export ORDERING="${ORDERING:-total}"
 export CONTROL="${CONTROL:-rpc}"
 export GROUP_SIZE="$N"
+# libera os comandos de demonstração do painel (/painel) nesta máquina
+export PAINEL_CONTROLE="${PAINEL_CONTROLE:-1}"
 COOKIE="${COOKIE:-trucoon}"
 HOST="${PEER_HOST:-127.0.0.1}"
 # os peers precisam achar o nó de controle no mesmo endereço em que ele sobe
@@ -63,4 +65,5 @@ done
 
 echo "Grupo subindo: controle + $N peers (ORDERING=$ORDERING, CONTROL=$CONTROL)"
 for i in $(seq 1 "$N"); do echo "  peer $i → http://$HOST:$((4000 + i))"; done
+echo "Painel ao vivo do multicast: http://$HOST:4001/painel"
 echo "Console do Verifier: scripts/console.sh   |   parar: scripts/down.sh"

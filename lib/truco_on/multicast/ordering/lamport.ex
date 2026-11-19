@@ -100,4 +100,21 @@ defmodule TrucoOn.Multicast.Ordering.Lamport do
 
   @impl true
   def pending(%__MODULE__{queue: q}), do: :gb_sets.size(q)
+
+  @impl true
+  def snapshot(%__MODULE__{} = st, describe) do
+    queue =
+      st.queue
+      |> :gb_sets.to_list()
+      |> Enum.take(12)
+      |> Enum.map(fn {ts, origin} = key ->
+        {id, payload} = Map.fetch!(st.msgs, key)
+        acks = st.acks |> Map.get(key, MapSet.new()) |> MapSet.to_list() |> Enum.sort()
+
+        describe.({:tm, ts, origin, id, payload})
+        |> Map.merge(%{acks: acks})
+      end)
+
+    %{clock: st.clock, queue: queue, needed: length(st.ids)}
+  end
 end
