@@ -13,7 +13,7 @@
 
 - Checkpoint 1 (05/11): https://docs.google.com/presentation/d/1XnzTkuvcFeIFaiBl8MVHFOCgGdjfAJenacRyqSoGmwE/edit?slide=id.p1#slide=id.p1
 - Checkpoint 2 (19/11): https://docs.google.com/presentation/d/18mQT3qAogjV7CZVnszwLlKvBC1TlWlZRCGCNS4gDJNo/edit?usp=sharing
-- Checkpoint 3 (26/11): _link a adicionar_
+- Checkpoint 3 (26/11): https://docs.google.com/presentation/d/1XPrQYZt-tCBnwIqEnPjtsIkYSYsp_TU3XPaxjMv1r6o/edit?usp=sharing
 
 ## Resumo
 
