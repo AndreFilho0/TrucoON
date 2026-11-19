@@ -1,0 +1,14 @@
+%% Fases do projeto: cada parte é construída sobre a anterior
+flowchart LR
+  P1A["<b>Parte 1a</b><br/>socket TCP × RPC<br/>no nó de controle"]
+  P1B["<b>Parte 1b</b><br/>multicast UDP<br/>perda e ordem FIFO"]
+  P2["<b>Parte 2</b><br/>truco replicado<br/>+ painel ao vivo"]
+  P3["<b>Parte 3</b><br/>ordem total<br/>(Lamport)"]
+  P4["<b>Parte 4</b><br/>ordem total<br/>(sequenciador)"]
+
+  P1A --> P1B -- "checkpoint 1 · 05/11" --> P2 -- "checkpoint 2 · 19/11" --> P3 --> P4
+
+  classDef feito fill:#DCFCE7,stroke:#15803D,color:#111
+  classDef proximo fill:#FFFFFF,stroke:#6B7280,stroke-dasharray: 4 3,color:#444
+  class P1A,P1B,P2 feito
+  class P3,P4 proximo

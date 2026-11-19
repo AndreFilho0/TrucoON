@@ -1,24 +1,13 @@
-# INF0336 — Seminário
+# INF0336 - Seminário
 
 ## TrucoON — truco online sobre multicast replicado
 
-Trabalho de **Sistemas Operacionais** (INF0344)** — UFG,
-2026/2. O projeto parte do [MPComm](https://github.com/professorfabio/MPComm) do Prof.
-Fábio M. Costa, reescrito em **Elixir/Erlang** (com a autorização do professor).
-Este README é o **relatório** do trabalho e é atualizado a cada checkpoint. Código do
-checkpoint 1: tag `parte-1b`. Código do checkpoint 2: tag `parte-2` (aplicação
-replicada) e a branch `checkpoint-2` (painel ao vivo do multicast). Detalhes de teoria e
-prática de cada entrega em [`docs/checkpoint-1/relatorio.md`](docs/checkpoint-1/relatorio.md)
-e [`docs/checkpoint-2/relatorio.md`](docs/checkpoint-2/relatorio.md).
+### Equipe: ZAP
 
-## Equipe
-
-Equipe **ZAP**:
-
-- 202406913 — André de Oliveira Machado Filho
-- 202109882 — Alan Queiroz Dantas de Oliveira
-- 202400316 — Stephany Jorge Araújo Resque
-- 202103736 — Jamilly Vitorya da Silva Barbosa
+- 202406913 - André de Oliveira Machado Filho
+- 202109882 - Alan Queiroz Dantas de Oliveira
+- 202400316 - Stephany Jorge Araújo Resque
+- 202103736 - Jamilly Vitorya da Silva Barbosa
 
 ## Apresentações
 
@@ -32,24 +21,22 @@ vários servidores (um por região), cada um com uma cópia das mesas. Cada joga
 mensagem trocada entre os servidores pela rede, e para todos mostrarem o mesmo jogo
 essas mensagens precisam chegar sem se perder e na ordem certa. Reescrevemos o MPComm
 em Elixir/Erlang, com um nó de controle que fala com os servidores por socket TCP ou
-por RPC e um multicast entre os servidores sobre UDP. Sobre o UDP, construímos um canal
-confiável e FIFO (número de sequência, ACK cumulativo, retransmissão e fila de espera),
-com injeção de perda e atraso para simular regiões diferentes. Esperávamos eliminar
-perdas e violações de ordem por remetente em relação ao canal UDP sem tratamento e
-comparar a latência de socket contra RPC. O canal confiável zerou perdas, duplicatas e
-violações de FIFO, e o RPC se mostrou cerca de 5× mais rápido que o socket por pedido.
-Conclui-se que o FIFO garante a ordem de cada remetente, mas não uma ordem igual para
-todos os servidores.
-
-No **checkpoint 2**, as mensagens viraram jogadas de truco. O jogo passou a ser uma
-**máquina de estados replicada**: regras puras e determinísticas (a semente do
-embaralhamento viaja no comando), uma réplica por servidor que só aplica um comando
-depois que ele volta pelo multicast, e um único escritor por servidor. Com jogadas
-simultâneas em servidores diferentes, o FIFO não basta: na disputa de cadeira,
-**8 de 8 mesas divergiram**, tanto sem tratamento quanto com FIFO. Para mostrar isso ao
-vivo, construímos um **painel do multicast** que anima as mensagens indo de um servidor
-para o outro, paradas nas filas e chegando à réplica. A ordem total (Lamport e
-sequenciador) é o tema do próximo checkpoint.
+por RPC e um multicast entre os servidores sobre UDP, com injeção de perda e atraso
+para simular regiões diferentes. Sobre o UDP, construímos um canal confiável e FIFO
+(número de sequência, ACK cumulativo, retransmissão e fila de espera) e, no
+checkpoint 2, transformamos o jogo numa **máquina de estados replicada**: regras puras
+e determinísticas (a semente do embaralhamento viaja no comando), uma réplica por
+servidor que só aplica um comando depois que ele volta pelo multicast e um único
+escritor por servidor. Para mostrar isso ao vivo, construímos um **painel do
+multicast** que anima as mensagens indo de um servidor para o outro, paradas nas filas
+e chegando à réplica. Esperávamos eliminar perdas e violações de ordem por remetente
+em relação ao canal UDP sem tratamento e comparar a latência de socket contra RPC. O
+canal confiável zerou perdas, duplicatas e violações de FIFO, e o RPC se mostrou cerca
+de 5× mais rápido que o socket por pedido. Com jogadas simultâneas em servidores
+diferentes, porém, o FIFO não basta: na disputa de cadeira, **8 de 8 mesas
+divergiram**, tanto sem tratamento quanto com FIFO. Conclui-se que o FIFO garante a
+ordem de cada remetente, mas não uma ordem igual para todos os servidores, e a ordem
+total (Lamport e sequenciador) é o tema do próximo checkpoint.
 
 ## Introdução
 
@@ -65,15 +52,38 @@ aparece como uma mesa dessincronizada. O TrucoON é o pretexto concreto para est
 do geral (processos e troca de mensagens) ao específico (canal confiável e ordenação),
 como processos conversam de forma correta.
 
+O trabalho é feito para **Sistemas Operacionais (INF0336)** — UFG, 2026/2. O projeto parte do [MPComm](https://github.com/professorfabio/MPComm)
+do Prof. Fábio M. Costa [5], reescrito em **Elixir/Erlang** (com a autorização do
+professor). Este README é o **relatório** do trabalho e é atualizado a cada checkpoint.
+
 ### Revisão bibliográfica
 
-- Processos, IPC, sockets e RPC: Tanenbaum & Bos [1] (lado SO) e Van Steen & Tanenbaum
-  [2] (lado SD, capítulo de comunicação).
-- Confiabilidade sobre canal não confiável e ordenação de mensagens: Van Steen &
-  Tanenbaum [2].
-- Modelo de processos isolados que só se comunicam por mensagens, base da escolha por
-  Elixir/Erlang: *The BEAM Book* [3] e a tese de Armstrong [4].
-- Base de código reescrita: MPComm, do Prof. Fábio M. Costa [5].
+Do lado de Sistemas Operacionais, Tanenbaum e Bos [1] tratam o processo como a unidade
+de isolamento: cada um tem o seu espaço de endereçamento, e a cooperação entre eles se
+dá por comunicação entre processos (IPC), seja por memória compartilhada, seja por
+troca de mensagens. É também ali que aparecem as condições de corrida e a seção
+crítica — o que acontece quando dois processos alteram o mesmo dado sem coordenação — e
+as soluções clássicas de exclusão mútua e o problema dos leitores e escritores.
+
+Do lado de Sistemas Distribuídos, Van Steen e Tanenbaum [2] partem da premissa de que
+não há memória compartilhada: processos em máquinas diferentes só se comunicam por
+mensagens. No capítulo de comunicação, comparam a interface de baixo nível dos sockets
+com o RPC, que busca transparência de acesso ao fazer uma chamada remota parecer uma
+chamada local. Nos capítulos de coordenação, replicação e tolerância a falhas, mostram
+como construir entrega confiável sobre um canal que perde mensagens (números de
+sequência, confirmações e retransmissão) e distinguem as garantias de ordem FIFO, causal
+e total, além da ideia de que réplicas determinísticas que aplicam os mesmos comandos
+na mesma ordem terminam no mesmo estado.
+
+A escolha por Elixir/Erlang se apoia em dois trabalhos sobre a máquina virtual BEAM.
+*The BEAM Book* [3] descreve como ela implementa processos leves, cada um com a sua
+própria memória e a sua caixa de mensagens, escalonados pela própria máquina virtual,
+de modo que o modelo de "processos isolados que só trocam mensagens" vale tanto dentro
+de um servidor quanto entre servidores. A tese de Armstrong [4] defende esse mesmo
+modelo como base para sistemas confiáveis na presença de erros de software: isolar as
+falhas em processos e organizá-los em árvores de supervisão que reiniciam o que quebrou.
+Por fim, a base de código reescrita é o MPComm, do Prof. Fábio M. Costa [5], com o nó
+de controle, o grupo de peers e o multicast como pontos de partida.
 
 ### Objetivos
 
@@ -111,6 +121,41 @@ máquina só com injeção de falhas para simular regiões diferentes.
   jogadores espalhados por 4 peers, todos pedindo as mesmas cadeiras ao mesmo tempo. No
   fim, o Verifier compara o hash de cada mesa entre as réplicas.
 
+Código de cada entrega: checkpoint 1 na tag `parte-1b`; checkpoint 2 na tag `parte-2`
+(aplicação replicada) e na branch `checkpoint-2` (painel ao vivo do multicast). Detalhes
+de teoria e prática de cada entrega em
+[`docs/checkpoint-1/relatorio.md`](docs/checkpoint-1/relatorio.md) e
+[`docs/checkpoint-2/relatorio.md`](docs/checkpoint-2/relatorio.md).
+
+Reproduzir:
+
+```bash
+CONTROL=socket ORDERING=none LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
+scripts/run.sh 'V.bench(30)'                  # perdas e violações de FIFO
+scripts/down.sh
+
+CONTROL=rpc ORDERING=fifo LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
+scripts/run.sh 'V.bench(30)'                  # 0 perdas, 0 violações
+scripts/run.sh 'V.transport_benchmark(300)'   # socket × RPC
+scripts/down.sh
+```
+
+Checkpoint 2 (jogo replicado e painel):
+
+```bash
+scripts/build_web.sh                          # frontend do jogo, servido por cada peer
+ORDERING=fifo scripts/up.sh 3
+scripts/run.sh 'S.seat_race(rooms: 8)'        # mesas divergentes sem ordem total
+# jogo:   http://127.0.0.1:4001
+# painel: http://127.0.0.1:4001/painel
+scripts/down.sh
+```
+
+Testes: `mix test` — `test/truco_on/multicast/protocols_test.exs` (rede simulada com
+30% de perda), `test/truco_on/integration/group_test.exs` (blocos "Parte 1a" e
+"Parte 1b"), `test/truco_on/truco/` (regras, jogo e mesas) e
+`test/truco_on/integration/divergence_test.exs` (réplicas divergem sem ordem total).
+
 ### Modelos (stack e infraestrutura)
 
 - **Elixir 1.17 / Erlang-OTP 27** sobre a BEAM: cada peer é um processo do SO
@@ -137,30 +182,6 @@ máquina só com injeção de falhas para simular regiões diferentes.
 - **Infraestrutura:** sem banco e sem Docker (estado em memória, replicado). Phoenix e
   Bandit vêm pelo `mix`, versões fixadas em `mix.lock`.
 
-Reproduzir:
-
-```bash
-CONTROL=socket ORDERING=none LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
-scripts/run.sh 'V.bench(30)'                  # perdas e violações de FIFO
-scripts/down.sh
-
-CONTROL=rpc ORDERING=fifo LOSS=0.1 DELAY_MAX=60 scripts/up.sh 4
-scripts/run.sh 'V.bench(30)'                  # 0 perdas, 0 violações
-scripts/run.sh 'V.transport_benchmark(300)'   # socket × RPC
-scripts/down.sh
-```
-
-Checkpoint 2 (jogo replicado e painel):
-
-```bash
-scripts/build_web.sh                          # frontend do jogo, servido por cada peer
-ORDERING=fifo scripts/up.sh 3
-scripts/run.sh 'S.seat_race(rooms: 8)'        # mesas divergentes sem ordem total
-# jogo:   http://127.0.0.1:4001
-# painel: http://127.0.0.1:4001/painel
-scripts/down.sh
-```
-
 **Painel ao vivo do multicast** (`/painel`): mostra os pacotes voando entre os peers, a
 fila de espera do canal FIFO, a fila da ordenação e os comandos aplicados em cada
 réplica, com o hash encadeado. As jogadas aparecem com nome: "TRUCO!", "SEIS!",
@@ -169,11 +190,6 @@ O controle "câmera lenta" aumenta o atraso da rede, "perda de pacotes" descarta
 datagramas e o botão "Disputa de cadeira" faz um jogador em cada peer pedir a cadeira
 0 ao mesmo tempo. Os controles só funcionam com `PAINEL_CONTROLE=1`, que o
 `scripts/up.sh` liga por padrão; num servidor público, o painel fica só de leitura.
-
-Testes: `mix test` — `test/truco_on/multicast/protocols_test.exs` (rede simulada com
-30% de perda), `test/truco_on/integration/group_test.exs` (blocos "Parte 1a" e
-"Parte 1b"), `test/truco_on/truco/` (regras, jogo e mesas) e
-`test/truco_on/integration/divergence_test.exs` (réplicas divergem sem ordem total).
 
 ### Métricas
 
@@ -185,7 +201,9 @@ Testes: `mix test` — `test/truco_on/multicast/protocols_test.exs` (rede simula
 
 ### Fluxograma
 
-Fases do projeto e visão geral da arquitetura (nó de controle + grupo de peers):
+Fases do projeto (cada parte é construída sobre a anterior):
+
+![Fases do projeto](docs/checkpoint-2/diagramas/fases.png)
 
 | Parte | Enunciado | Estado |
 |---|---|---|
@@ -194,6 +212,8 @@ Fases do projeto e visão geral da arquitetura (nó de controle + grupo de peers
 | 2 | Aplicação em que a ordem é crítica (truco replicado) + painel ao vivo | ✅ |
 | 3 | Coordenação por ordem total (Lamport, cap. 5) | próximas entregas |
 | 4 | Coordenação mais leve (sequenciador, cap. 7) | próximas entregas |
+
+Visão geral da arquitetura (nó de controle + grupo de peers):
 
 ![Visão geral: nó de controle e grupo de peers](docs/checkpoint-1/diagramas/visao-geral.png)
 
@@ -204,6 +224,15 @@ como em todas as outras réplicas.
 ![Caminho de uma jogada](docs/checkpoint-2/diagramas/fluxo-comando.png)
 
 ## Resultados
+
+### Gráficos
+
+![Latência por pedido: socket TCP × RPC](docs/checkpoint-2/graficos/latencia-transporte.png)
+
+![Multicast sem tratamento × canal confiável FIFO](docs/checkpoint-2/graficos/multicast-perdas-fifo.png)
+
+Os gráficos são gerados a partir dos números das tabelas abaixo por
+`python3 scripts/graficos.py docs/checkpoint-2/graficos`.
 
 ### Tabelas
 
@@ -305,12 +334,13 @@ o mesmo vencedor em todas as réplicas.
 
 ## Referências
 
-- [1] TANENBAUM, A. S.; BOS, H. **Sistemas Operacionais Modernos**. 4. ed. São Paulo:
+- [1] TANENBAUM, A. S.; BOS, H. **Sistemas operacionais modernos**. 4. ed. São Paulo:
   Pearson, 2016.
-- [2] VAN STEEN, M.; TANENBAUM, A. S. **Distributed Systems**. 4. ed. [S.l.]:
+- [2] VAN STEEN, M.; TANENBAUM, A. S. **Distributed systems**. 4. ed. [S.l.]:
   distributed-systems.net, 2023.
-- [3] STENMAN, E. **The BEAM Book: Understanding the Erlang Runtime System**.
-  Disponível em: https://blog.stenmans.org/theBeamBook/. Acesso em: 5 nov. 2026.
+- [3] STENMAN, E. **The BEAM book**: understanding the Erlang runtime system. [S.l.:
+  s.n.], [s.d.]. Disponível em: https://blog.stenmans.org/theBeamBook/. Acesso em:
+  5 nov. 2026.
 - [4] ARMSTRONG, J. **Making reliable distributed systems in the presence of software
   errors**. 2003. Tese (Doutorado) — KTH Royal Institute of Technology, Estocolmo, 2003.
 - [5] COSTA, F. M. **MPComm**. GitHub, [s.d.]. Disponível em:

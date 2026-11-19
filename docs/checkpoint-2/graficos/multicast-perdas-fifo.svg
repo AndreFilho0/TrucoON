@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="414" viewBox="0 0 720 414" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="720" height="414" fill="#ffffff"/>
+<text x="24" y="30" font-size="17" font-weight="600" fill="#0b0b0b">Multicast sem tratamento × canal confiável FIFO</text>
+<text x="24" y="52" font-size="13" fill="#52514e">4 peers, 30 mensagens cada, 10% de perda e 0–60 ms de atraso</text>
+<rect x="24" y="66" width="12" height="12" rx="3" fill="#2a78d6"/>
+<text x="42" y="76.5" font-size="13" fill="#0b0b0b">ORDERING=none</text>
+<rect x="162.2" y="66" width="12" height="12" rx="3" fill="#eb6834"/>
+<text x="180.2" y="76.5" font-size="13" fill="#0b0b0b">ORDERING=fifo</text>
+<line x1="64" x2="696" y1="358.0" y2="358.0" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="362.0" font-size="12" fill="#52514e" text-anchor="end">0</text>
+<line x1="64" x2="696" y1="317.6666666666667" y2="317.6666666666667" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="321.6666666666667" font-size="12" fill="#52514e" text-anchor="end">10</text>
+<line x1="64" x2="696" y1="277.33333333333337" y2="277.33333333333337" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="281.33333333333337" font-size="12" fill="#52514e" text-anchor="end">20</text>
+<line x1="64" x2="696" y1="237.0" y2="237.0" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="241.0" font-size="12" fill="#52514e" text-anchor="end">30</text>
+<line x1="64" x2="696" y1="196.66666666666669" y2="196.66666666666669" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="200.66666666666669" font-size="12" fill="#52514e" text-anchor="end">40</text>
+<line x1="64" x2="696" y1="156.33333333333331" y2="156.33333333333331" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="160.33333333333331" font-size="12" fill="#52514e" text-anchor="end">50</text>
+<line x1="64" x2="696" y1="116.0" y2="116.0" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="120.0" font-size="12" fill="#52514e" text-anchor="end">60</text>
+<text x="56" y="100" font-size="12" fill="#52514e" text-anchor="end">msgs</text>
+<path d="M112.33333333333331,358 L112.33333333333331,160.33333333333331 Q112.33333333333331,156.33333333333331 116.33333333333331,156.33333333333331 L164.33333333333331,156.33333333333331 Q168.33333333333331,156.33333333333331 168.33333333333331,160.33333333333331 L168.33333333333331,358 Z" fill="#2a78d6"><title>ORDERING=none · Perdidas: 50 msgs</title></path>
+<text x="140.33333333333331" y="150.33333333333331" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">50</text>
+<line x1="170.33333333333331" x2="226.33333333333331" y1="357" y2="357" stroke="#eb6834" stroke-width="2"/>
+<text x="198.33333333333331" y="352.0" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">0</text>
+<text x="169.33333333333331" y="378" font-size="13" fill="#0b0b0b" text-anchor="middle">Perdidas</text>
+<line x1="322.99999999999994" x2="378.99999999999994" y1="357" y2="357" stroke="#2a78d6" stroke-width="2"/>
+<text x="350.99999999999994" y="352.0" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">0</text>
+<line x1="380.99999999999994" x2="436.99999999999994" y1="357" y2="357" stroke="#eb6834" stroke-width="2"/>
+<text x="408.99999999999994" y="352.0" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">0</text>
+<text x="379.99999999999994" y="378" font-size="13" fill="#0b0b0b" text-anchor="middle">Duplicadas</text>
+<path d="M533.6666666666666,358 L533.6666666666666,249.06666666666666 Q533.6666666666666,245.06666666666666 537.6666666666666,245.06666666666666 L585.6666666666666,245.06666666666666 Q589.6666666666666,245.06666666666666 589.6666666666666,249.06666666666666 L589.6666666666666,358 Z" fill="#2a78d6"><title>ORDERING=none · Violações de FIFO: 28 msgs</title></path>
+<text x="561.6666666666666" y="239.06666666666666" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">28</text>
+<line x1="591.6666666666666" x2="647.6666666666666" y1="357" y2="357" stroke="#eb6834" stroke-width="2"/>
+<text x="619.6666666666666" y="352.0" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">0</text>
+<text x="590.6666666666666" y="378" font-size="13" fill="#0b0b0b" text-anchor="middle">Violações de FIFO</text>
+<line x1="64" x2="696" y1="358" y2="358" stroke="#52514e" stroke-width="1"/>
+<text x="24" y="402" font-size="11.5" fill="#52514e">Fonte: V.bench(30). Menor é melhor; o canal FIFO zera as três métricas.</text>
+</svg>

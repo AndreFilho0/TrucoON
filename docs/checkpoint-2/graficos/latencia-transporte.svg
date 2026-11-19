@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="414" viewBox="0 0 720 414" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="720" height="414" fill="#ffffff"/>
+<text x="24" y="30" font-size="17" font-weight="600" fill="#0b0b0b">Latência por pedido: socket TCP × RPC</text>
+<text x="24" y="52" font-size="13" fill="#52514e">300 pedidos para cada um de 3 peers, mesmo caminho de código</text>
+<rect x="24" y="66" width="12" height="12" rx="3" fill="#2a78d6"/>
+<text x="42" y="76.5" font-size="13" fill="#0b0b0b">Socket TCP (conexão por pedido)</text>
+<rect x="295.4" y="66" width="12" height="12" rx="3" fill="#eb6834"/>
+<text x="313.4" y="76.5" font-size="13" fill="#0b0b0b">RPC (:erpc)</text>
+<line x1="64" x2="696" y1="358.0" y2="358.0" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="362.0" font-size="12" fill="#52514e" text-anchor="end">0</text>
+<line x1="64" x2="696" y1="309.6" y2="309.6" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="313.6" font-size="12" fill="#52514e" text-anchor="end">50</text>
+<line x1="64" x2="696" y1="261.2" y2="261.2" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="265.2" font-size="12" fill="#52514e" text-anchor="end">100</text>
+<line x1="64" x2="696" y1="212.8" y2="212.8" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="216.8" font-size="12" fill="#52514e" text-anchor="end">150</text>
+<line x1="64" x2="696" y1="164.39999999999998" y2="164.39999999999998" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="168.39999999999998" font-size="12" fill="#52514e" text-anchor="end">200</text>
+<line x1="64" x2="696" y1="116.0" y2="116.0" stroke="#e6e5e0" stroke-width="1"/>
+<text x="56" y="120.0" font-size="12" fill="#52514e" text-anchor="end">250</text>
+<text x="56" y="100" font-size="12" fill="#52514e" text-anchor="end">µs</text>
+<path d="M112.33333333333331,358 L112.33333333333331,223.57600000000002 Q112.33333333333331,219.57600000000002 116.33333333333331,219.57600000000002 L164.33333333333331,219.57600000000002 Q168.33333333333331,219.57600000000002 168.33333333333331,223.57600000000002 L168.33333333333331,358 Z" fill="#2a78d6"><title>Socket TCP (conexão por pedido) · Média: 143 µs</title></path>
+<text x="140.33333333333331" y="213.57600000000002" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">143</text>
+<path d="M170.33333333333331,358 L170.33333333333331,334.896 Q170.33333333333331,330.896 174.33333333333331,330.896 L222.33333333333331,330.896 Q226.33333333333331,330.896 226.33333333333331,334.896 L226.33333333333331,358 Z" fill="#eb6834"><title>RPC (:erpc) · Média: 28 µs</title></path>
+<text x="198.33333333333331" y="324.896" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">28</text>
+<text x="169.33333333333331" y="378" font-size="13" fill="#0b0b0b" text-anchor="middle">Média</text>
+<path d="M322.99999999999994,358 L322.99999999999994,233.256 Q322.99999999999994,229.256 326.99999999999994,229.256 L374.99999999999994,229.256 Q378.99999999999994,229.256 378.99999999999994,233.256 L378.99999999999994,358 Z" fill="#2a78d6"><title>Socket TCP (conexão por pedido) · Mediana: 133 µs</title></path>
+<text x="350.99999999999994" y="223.256" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">133</text>
+<path d="M380.99999999999994,358 L380.99999999999994,335.864 Q380.99999999999994,331.864 384.99999999999994,331.864 L432.99999999999994,331.864 Q436.99999999999994,331.864 436.99999999999994,335.864 L436.99999999999994,358 Z" fill="#eb6834"><title>RPC (:erpc) · Mediana: 27 µs</title></path>
+<text x="408.99999999999994" y="325.864" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">27</text>
+<text x="379.99999999999994" y="378" font-size="13" fill="#0b0b0b" text-anchor="middle">Mediana</text>
+<path d="M533.6666666666666,358 L533.6666666666666,165.49599999999998 Q533.6666666666666,161.49599999999998 537.6666666666666,161.49599999999998 L585.6666666666666,161.49599999999998 Q589.6666666666666,161.49599999999998 589.6666666666666,165.49599999999998 L589.6666666666666,358 Z" fill="#2a78d6"><title>Socket TCP (conexão por pedido) · p99: 203 µs</title></path>
+<text x="561.6666666666666" y="155.49599999999998" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">203</text>
+<path d="M591.6666666666666,358 L591.6666666666666,307.79200000000003 Q591.6666666666666,303.79200000000003 595.6666666666666,303.79200000000003 L643.6666666666666,303.79200000000003 Q647.6666666666666,303.79200000000003 647.6666666666666,307.79200000000003 L647.6666666666666,358 Z" fill="#eb6834"><title>RPC (:erpc) · p99: 56 µs</title></path>
+<text x="619.6666666666666" y="297.79200000000003" font-size="12.5" font-weight="600" fill="#0b0b0b" text-anchor="middle">56</text>
+<text x="590.6666666666666" y="378" font-size="13" fill="#0b0b0b" text-anchor="middle">p99</text>
+<line x1="64" x2="696" y1="358" y2="358" stroke="#52514e" stroke-width="1"/>
+<text x="24" y="402" font-size="11.5" fill="#52514e">Fonte: V.transport_benchmark(300). Menor é melhor.</text>
+</svg>
